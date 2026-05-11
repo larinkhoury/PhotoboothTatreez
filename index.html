@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Powers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <style>
+        /* 2000s Aesthetic Fonts and Styles */
+        @import url('https://fonts.googleapis.com/css2?family=Shrikhand&display=swap');
+
+        body { 
+            background-color: #000; 
+            margin: 0; 
+            overflow: hidden; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            font-family: 'Shrikhand', cursive;
+            color: white;
+            cursor: pointer;
+        }
+
+        .canvas-wrapper { 
+            position: relative; 
+            width: 100vw; 
+            height: 100vh; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            opacity: 0;
+            transition: opacity 1.5s ease-in;
+        }
+
+        .canvas-wrapper.active {
+            opacity: 1;
+        }
+
+        canvas { max-width: 100%; max-height: 100%; }
+
+        .hidden-video { 
+            position: absolute; 
+            width: 1px; 
+            height: 1px; 
+            opacity: 0; 
+            pointer-events: none; 
+        }
+
+        #landingOverlay { 
+            position: absolute; 
+            inset: 0; 
+            background: #000; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            z-index: 1000; 
+            transition: opacity 1s ease-out;
+        }
+
+        /* Sparkly Pink 2000s Title */
+        .hero-text {
+            font-size: 2.2rem;
+            font-weight: normal;
+            color: #ff69b4;
+            text-align: center;
+            background: linear-gradient(
+                to right, 
+                #ff1493 20%, 
+                #ff69b4 30%, 
+                #ffffff 70%, 
+                #ff69b4 80%
+            );
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 15px rgba(255, 20, 147, 0.6);
+            animation: shine 2s linear infinite, float 3s ease-in-out infinite;
+            filter: drop-shadow(0 0 2px #fff);
+        }
+
+        @keyframes shine {
+            to { background-position: 200% center; }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        #loadingStatus {
+            font-family: 'Inter', sans-serif;
+            font-weight: 900;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Initial Landing View -->
+    <div id="landingOverlay">
+        <h1 class="hero-text">unleash your super powers</h1>
+        <div id="loadingStatus" class="mt-12 text-pink-500 hidden text-[10px] tracking-[0.4em] animate-pulse">
+            LOADING ENERGY...
+        </div>
+    </div>
+
+    <!-- Filter View -->
+    <div id="canvasWrapper" class="canvas-wrapper">
+        <canvas id="mainCanvas"></canvas>
+        <video id="hiddenVideo" class="hidden-video" autoplay playsinline muted></video>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const video = document.getElementById('hiddenVideo');
+        const landingOverlay = document.getElementById('landingOverlay');
+        const loadingStatus = document.getElementById('loadingStatus');
+        const canvasWrapper = document.getElementById('canvasWrapper');
+
+        let persistentWarpData = null;
+        let hands = null;
+        let faceMesh = null;
+        let activeHands = [];
+        let activeEyes = [];
+        let currentMode = 'none'; 
+        let isRunning = false;
+        let frameCount = 0;
+        let initialized = false;
+
+        // Start everything on first click
+        document.body.addEventListener('click', async () => {
+            if (initialized) return;
+            initialized = true;
+            
+            loadingStatus.classList.remove('hidden');
+
+            try {
+                await initAI();
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 1280, height: 720, facingMode: "user" } 
+                });
+                video.srcObject = stream;
+                await video.play();
+
+                setupCanvasDimensions(video.videoWidth, video.videoHeight);
+                initializeWarpBuffers();
+                
+                // Transition UI
+                landingOverlay.style.opacity = '0';
+                setTimeout(() => {
+                    landingOverlay.style.display = 'none';
+                    canvasWrapper.classList.add('active');
+                }, 1000);
+
+                isRunning = true;
+                
+                const camera = new Camera(video, {
+                    onFrame: async () => {
+                        if (isRunning) {
+                            await hands.send({image: video});
+                            await faceMesh.send({image: video});
+                            processLoop();
+                        }
+                    },
+                    width: video.videoWidth, height: video.videoHeight
+                });
+                camera.start();
+
+            } catch (err) {
+                console.error(err);
+                loadingStatus.innerText = "CAMERA ERROR";
+                loadingStatus.classList.add('text-red-500');
+                initialized = false;
+            }
+        });
+
+        async function initAI() {
+            hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+            hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+            hands.onResults(onHandResults);
+
+            faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
+            faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+            faceMesh.onResults(onFaceResults);
+        }
+
+        function onHandResults(results) {
+            activeHands = [];
+            const multiHandLandmarks = results.multiHandLandmarks || [];
+            if (multiHandLandmarks.length === 2) currentMode = 'pinch';
+            else if (multiHandLandmarks.length === 1) {
+                currentMode = countFingers(multiHandLandmarks[0]) === 5 ? 'twirl' : 'none';
+            } else currentMode = 'none';
+
+            multiHandLandmarks.forEach(landmark => {
+                const tip = landmark[8]; 
+                activeHands.push({ x: (1 - tip.x) * canvas.width, y: tip.y * canvas.height });
+            });
+        }
+
+        function onFaceResults(results) {
+            activeEyes = [];
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                const landmarks = results.multiFaceLandmarks[0];
+                const lx = (landmarks[33].x + landmarks[133].x) / 2;
+                const ly = (landmarks[159].y + landmarks[145].y) / 2;
+                const rx = (landmarks[362].x + landmarks[263].x) / 2;
+                const ry = (landmarks[386].y + landmarks[374].y) / 2;
+                activeEyes.push({ x: (1 - lx) * canvas.width, y: ly * canvas.height });
+                activeEyes.push({ x: (1 - rx) * canvas.width, y: ry * canvas.height });
+            }
+        }
+
+        function countFingers(landmarks) {
+            let count = 0;
+            [8, 12, 16, 20].forEach(tip => { if (landmarks[tip].y < landmarks[tip-2].y) count++; });
+            if (Math.hypot(landmarks[4].x - landmarks[0].x, landmarks[4].y - landmarks[0].y) > Math.hypot(landmarks[2].x - landmarks[0].x, landmarks[2].y - landmarks[0].y) * 1.2) count++;
+            return count;
+        }
+
+        function setupCanvasDimensions(w, h) {
+            const vh = window.innerHeight, vw = window.innerWidth, ratio = w / h;
+            canvas.width = (vw/vh > ratio) ? vh * ratio : vw;
+            canvas.height = (vw/vh > ratio) ? vh : vw / ratio;
+        }
+
+        function initializeWarpBuffers() {
+            const w = canvas.width, h = canvas.height;
+            persistentWarpData = new Float32Array(w * h * 2);
+            for (let i = 0; i < w * h; i++) {
+                persistentWarpData[i * 2] = i % w;
+                persistentWarpData[i * 2 + 1] = Math.floor(i / w);
+            }
+        }
+
+        function updateWarpMap() {
+            if (!persistentWarpData) return;
+            const w = canvas.width, h = canvas.height;
+            frameCount++;
+
+            if (currentMode !== 'none') {
+                const radius = 130, strength = 0.05;
+                activeHands.forEach(p => {
+                    const sX = Math.max(0, p.x - radius), eX = Math.min(w, p.x + radius);
+                    const sY = Math.max(0, p.y - radius), eY = Math.min(h, p.y + radius);
+                    for (let y = sY; y < eY; y++) {
+                        for (let x = sX; x < eX; x++) {
+                            const dx = x - p.x, dy = y - p.y, d = Math.sqrt(dx*dx + dy*dy);
+                            if (d < radius) {
+                                const amt = (radius - d) / radius;
+                                const idx = (Math.floor(y)*w + Math.floor(x))*2;
+                                if (currentMode === 'pinch') {
+                                    persistentWarpData[idx] += (persistentWarpData[idx] - p.x) * amt * strength;
+                                    persistentWarpData[idx+1] += (persistentWarpData[idx+1] - p.y) * amt * strength;
+                                } else {
+                                    const a = amt * 0.1, c = Math.cos(a), s = Math.sin(a);
+                                    const du = persistentWarpData[idx] - p.x, dv = persistentWarpData[idx+1] - p.y;
+                                    persistentWarpData[idx] = p.x + (du * c - dv * s);
+                                    persistentWarpData[idx+1] = p.y + (du * s + dv * c);
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            activeEyes.forEach(eye => {
+                const r = 50; 
+                const sX = Math.max(0, eye.x - r), eX = Math.min(w, eye.x + r);
+                const sY = Math.max(0, eye.y - r), eY = Math.min(h, eye.y + r);
+                for (let y = sY; y < eY; y++) {
+                    for (let x = sX; x < eX; x++) {
+                        const dx = x - eye.x, dy = y - eye.y, d = Math.sqrt(dx*dx + dy*dy);
+                        if (d < r) {
+                            const idx = (Math.floor(y)*w + Math.floor(x))*2;
+                            const ripple = Math.sin(d * 0.2 - frameCount * 0.15) * (r - d) * 0.05;
+                            persistentWarpData[idx] += ripple * (dx / d);
+                            persistentWarpData[idx+1] += ripple * (dy / d);
+                        }
+                    }
+                }
+            });
+        }
+
+        function processLoop() {
+            const w = canvas.width, h = canvas.height;
+            const off = document.createElement('canvas'); off.width = w; off.height = h;
+            const oCtx = off.getContext('2d');
+            oCtx.translate(w, 0); oCtx.scale(-1, 1);
+            oCtx.drawImage(video, 0, 0, w, h);
+            
+            const src = oCtx.getImageData(0, 0, w, h).data;
+            const output = ctx.createImageData(w, h);
+            const dst = output.data;
+
+            updateWarpMap();
+
+            for (let i = 0; i < w * h; i++) {
+                const u = Math.max(0, Math.min(w - 1, persistentWarpData[i*2]));
+                const v = Math.max(0, Math.min(h - 1, persistentWarpData[i*2+1]));
+                const x1 = Math.floor(u), y1 = Math.floor(v), o = i * 4, p = (y1*w+x1)*4;
+                dst[o] = src[p]; dst[o+1] = src[p+1]; dst[o+2] = src[p+2]; dst[o+3] = 255;
+            }
+            ctx.putImageData(output, 0, 0);
+        }
+
+        window.onresize = () => {
+            if (isRunning && video.videoWidth) {
+                setupCanvasDimensions(video.videoWidth, video.videoHeight);
+            }
+        };
+    </script>
+</body>
+</html>
