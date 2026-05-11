@@ -8,57 +8,68 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Setup
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        window.fb = { db, auth, appId, collection, addDoc, onSnapshot, query, limit };
+        
+        signInAnonymously(auth).catch(console.error);
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Shrikhand&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;700&display=swap');
 
         body { 
-            background-color: #000; 
+            background-color: #0b010b; 
             margin: 0; 
             overflow: hidden; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
             height: 100vh; 
-            font-family: 'Shrikhand', cursive;
+            font-family: 'Space Grotesk', sans-serif;
             color: white;
             cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
         }
 
         .canvas-wrapper { 
             position: relative; 
             width: 100vw; 
             height: 100vh; 
-            display: flex; 
+            display: none; 
             justify-content: center; 
             align-items: center; 
             opacity: 0;
-            transition: opacity 1.5s ease-in;
+            transition: opacity 1s ease;
         }
 
         .canvas-wrapper.active {
+            display: flex;
             opacity: 1;
         }
 
         canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
 
-        .hidden-video { 
-            position: absolute; 
-            width: 1px; 
-            height: 1px; 
-            opacity: 0; 
-            pointer-events: none; 
-        }
-
         #landingOverlay { 
             position: absolute; 
             inset: 0; 
-            background: #300030; 
+            background: radial-gradient(circle at center, #4a004a 0%, #1a001a 100%);
             display: flex; 
             flex-direction: column; 
             justify-content: center; 
             align-items: center; 
             z-index: 1000; 
-            transition: opacity 1.2s ease-out;
+            transition: opacity 1s ease, transform 1.2s ease;
             overflow: hidden;
         }
 
@@ -68,68 +79,120 @@
             width: 100%;
             height: 100%;
             z-index: -1;
-            /* Filter blur to make the swirl look more liquid/shiny */
-            filter: contrast(1.2) saturate(1.5);
+            filter: contrast(1.3) saturate(1.4) brightness(1.1);
         }
 
-        .hero-text {
-            font-size: 2.5rem;
-            font-weight: normal;
-            color: #ff69b4;
+        .ui-container {
+            position: relative;
+            z-index: 10;
             text-align: center;
-            background: linear-gradient(
-                to right, 
-                #ff00ff 20%, 
-                #ff69b4 30%, 
-                #ffffff 70%, 
-                #ff00ff 80%
-            );
+            padding: 2rem;
+            max-width: 90%;
+            pointer-events: none;
+            transition: opacity 0.5s ease-out;
+        }
+
+        .ui-container.fade-out { opacity: 0; }
+
+        .hero-text {
+            font-family: 'Shrikhand', cursive;
+            font-size: clamp(2.5rem, 10vw, 5rem);
+            line-height: 1.1;
+            color: #ff69b4;
+            background: linear-gradient(to right, #ff00ff 20%, #ff69b4 30%, #ffffff 70%, #ff00ff 80%);
             background-size: 200% auto;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            text-shadow: 4px 4px 0px #8b008b;
-            animation: shine 2s linear infinite, float 3s ease-in-out infinite;
-            filter: drop-shadow(0 0 8px rgba(255, 105, 180, 0.9));
-            padding: 0 20px;
+            animation: shine 3s linear infinite;
+            filter: drop-shadow(0 0 15px rgba(255, 105, 180, 0.6));
+            user-select: none;
+        }
+
+        @keyframes shine { to { background-position: 200% center; } }
+
+        /* Gallery/Library View */
+        #libraryOverlay {
+            position: absolute;
+            inset: 0;
+            background: #0b010b;
+            z-index: 2000;
+            display: none;
+            overflow-y: auto;
+            padding: 2rem;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 1200px;
+            margin-top: 2rem;
+        }
+
+        .gallery-item {
+            background: #1a001a;
+            border: 1px solid #ff00ff44;
+            border-radius: 12px;
+            overflow: hidden;
+            aspect-ratio: 1;
+            transition: transform 0.3s ease;
+        }
+
+        .gallery-item:hover { transform: scale(1.03); }
+        .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
+
+        #captureFlash {
+            position: fixed;
+            inset: 0;
+            background: white;
+            z-index: 3000;
             pointer-events: none;
+            opacity: 0;
         }
 
-        @keyframes shine {
-            to { background-position: 200% center; }
+        .saving-loader {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 105, 180, 0.9);
+            color: white;
+            padding: 0.5rem 1.5rem;
+            border-radius: 99px;
+            font-weight: bold;
+            z-index: 3001;
+            display: none;
         }
 
-        @keyframes float {
-            0%, 100% { transform: translateY(0) scale(1); }
-            50% { transform: translateY(-15px) scale(1.05); }
-        }
-
-        #loadingStatus {
-            font-family: 'Inter', sans-serif;
-            font-weight: 900;
-            background: rgba(255, 20, 147, 0.2);
-            padding: 8px 20px;
-            border-radius: 20px;
-            border: 2px solid #ff69b4;
-            color: #fff;
-            text-shadow: 0 0 5px #ff1493;
-            pointer-events: none;
-        }
     </style>
 </head>
 <body>
 
     <div id="landingOverlay">
         <canvas id="bgCanvas"></canvas>
-        <h1 class="hero-text">unleash your super powers</h1>
-        <div id="loadingStatus" class="mt-12 hidden text-[10px] tracking-[0.4em] animate-pulse">
-            COLLECTING FAIRY DUST...
+        <div class="ui-container" id="uiContainer">
+            <h1 class="hero-text">unleash your<br>super powers</h1>
         </div>
     </div>
 
     <div id="canvasWrapper" class="canvas-wrapper">
         <canvas id="mainCanvas"></canvas>
-        <video id="hiddenVideo" class="hidden-video" autoplay playsinline muted></video>
+        <video id="hiddenVideo" style="display:none" autoplay playsinline muted></video>
+        <div class="saving-loader" id="savingLoader">SAVING TO LIBRARY...</div>
     </div>
+
+    <div id="libraryOverlay">
+        <div class="flex justify-between w-full max-w-6xl mb-8">
+            <h2 class="hero-text !text-4xl">the library</h2>
+            <button onclick="location.reload()" class="bg-pink-600 text-white px-6 py-2 rounded-full font-bold hover:bg-pink-500 transition">TRY AGAIN</button>
+        </div>
+        <div class="gallery-grid" id="galleryGrid"></div>
+    </div>
+
+    <div id="captureFlash"></div>
 
     <script>
         const canvas = document.getElementById('mainCanvas');
@@ -138,8 +201,11 @@
         const bgCtx = bgCanvas.getContext('2d');
         const video = document.getElementById('hiddenVideo');
         const landingOverlay = document.getElementById('landingOverlay');
-        const loadingStatus = document.getElementById('loadingStatus');
+        const uiContainer = document.getElementById('uiContainer');
         const canvasWrapper = document.getElementById('canvasWrapper');
+        const libraryOverlay = document.getElementById('libraryOverlay');
+        const galleryGrid = document.getElementById('galleryGrid');
+        const savingLoader = document.getElementById('savingLoader');
 
         let persistentWarpData = null;
         let landingWarpData = null;
@@ -150,207 +216,156 @@
         let isRunning = false;
         let frameCount = 0;
         let initialized = false;
+        let isSaving = false;
 
-        // --- 2000s Background Animation ---
         const fairies = [];
         const stars = [];
 
         function initBackground() {
             const w = bgCanvas.width = window.innerWidth / 4; 
             const h = bgCanvas.height = window.innerHeight / 4;
-            
-            // Initialize Warp Buffer for Landing Page
             landingWarpData = new Float32Array(w * h * 2);
-            for (let i = 0; i < w * h; i++) {
-                landingWarpData[i * 2] = i % w;
-                landingWarpData[i * 2 + 1] = Math.floor(i / w);
+            const centerX = w / 2, centerY = h / 2, radius = w * 0.9;
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const idx = (y * w + x) * 2;
+                    const dx = x - centerX, dy = y - centerY, d = Math.sqrt(dx*dx + dy*dy);
+                    if (d < radius) {
+                        const amt = Math.pow((radius - d) / radius, 1.4);
+                        const angle = amt * 2.8; 
+                        const c = Math.cos(angle), s = Math.sin(angle);
+                        landingWarpData[idx] = centerX + (dx * c - dy * s);
+                        landingWarpData[idx+1] = centerY + (dx * s + dy * c);
+                    } else {
+                        landingWarpData[idx] = x; landingWarpData[idx+1] = y;
+                    }
+                }
             }
-
-            for(let i=0; i<15; i++) {
-                fairies.push({
-                    x: Math.random() * w,
-                    y: Math.random() * h,
-                    vx: (Math.random() - 0.5) * 0.5,
-                    vy: (Math.random() - 0.5) * 0.5,
-                    color: Math.random() > 0.5 ? '#ff00ff' : '#00ffff'
-                });
-            }
-            for(let i=0; i<100; i++) {
-                stars.push({
-                    x: Math.random() * w,
-                    y: Math.random() * h,
-                    alpha: Math.random() * Math.PI,
-                    speed: 0.05 + Math.random() * 0.1
-                });
-            }
+            for(let i=0; i<25; i++) fairies.push({x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4, color: Math.random() > 0.5 ? '#ff00ff' : '#00ffff'});
+            for(let i=0; i<150; i++) stars.push({x: Math.random() * w, y: Math.random() * h, alpha: Math.random() * Math.PI, speed: 0.04 + Math.random() * 0.08});
             drawBackground();
         }
 
         function drawBackground() {
             if(initialized && landingOverlay.style.display === 'none') return;
-            
-            const w = bgCanvas.width;
-            const h = bgCanvas.height;
+            const w = bgCanvas.width, h = bgCanvas.height;
             frameCount++;
-
-            // Create temporary source buffer for the gradient/fairies
-            const off = document.createElement('canvas'); 
-            off.width = w; off.height = h;
+            const off = document.createElement('canvas'); off.width = w; off.height = h;
             const oCtx = off.getContext('2d');
-
-            // 1. Draw Vibrant Shiny Gradient
-            const grad = oCtx.createLinearGradient(0, 0, w, h);
-            grad.addColorStop(0, '#4a004a');
-            grad.addColorStop(0.3, '#ff00ff');
-            grad.addColorStop(0.5, '#ffffff'); // The "shine"
-            grad.addColorStop(0.7, '#ff00ff');
-            grad.addColorStop(1, '#4a004a');
-            oCtx.fillStyle = grad;
-            oCtx.fillRect(0, 0, w, h);
-
-            // 2. Draw Stars and Fairies into the buffer
-            stars.forEach(s => {
-                s.alpha += s.speed;
-                const brightness = 150 + Math.sin(s.alpha) * 105;
-                oCtx.fillStyle = `rgb(${brightness}, ${brightness * 0.6}, ${brightness})`;
-                oCtx.fillRect(Math.floor(s.x), Math.floor(s.y), 1, 1);
-            });
-
-            fairies.forEach(f => {
-                f.x = (f.x + f.vx + w) % w;
-                f.y = (f.y + f.vy + h) % h;
-                const flicker = Math.sin(Date.now() * 0.015) > 0;
-                oCtx.fillStyle = flicker ? '#fff' : f.color;
-                const px = Math.floor(f.x), py = Math.floor(f.y);
-                oCtx.fillRect(px, py, 1, 1);
-                oCtx.fillStyle = '#ff69b4';
-                oCtx.fillRect(px-1, py-1, 1, 1); oCtx.fillRect(px+1, py-1, 1, 1);
-                oCtx.fillRect(px-1, py+1, 1, 1); oCtx.fillRect(px+1, py+1, 1, 1);
-            });
-
-            // 3. Apply Twirl Warp to landingWarpData
-            // We simulate a constant "twirl" in the center for the shiny effect
-            const centerX = w / 2 + Math.sin(frameCount * 0.02) * (w / 4);
-            const centerY = h / 2 + Math.cos(frameCount * 0.02) * (h / 4);
-            const radius = w / 2;
-            
-            for (let y = 0; y < h; y++) {
-                for (let x = 0; x < w; x++) {
-                    const dx = x - centerX, dy = y - centerY, d = Math.sqrt(dx*dx + dy*dy);
-                    if (d < radius) {
-                        const amt = (radius - d) / radius;
-                        const idx = (y * w + x) * 2;
-                        const a = amt * 0.05, c = Math.cos(a), s = Math.sin(a);
-                        const du = landingWarpData[idx] - centerX, dv = landingWarpData[idx+1] - centerY;
-                        landingWarpData[idx] = centerX + (du * c - dv * s);
-                        landingWarpData[idx+1] = centerY + (du * s + dv * c);
-                    }
-                }
-            }
-
-            // 4. Render warped buffer to bgCanvas
+            const grad = oCtx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w);
+            grad.addColorStop(0, '#ff00ff'); grad.addColorStop(0.2, '#800080'); grad.addColorStop(0.4, '#3a003a'); grad.addColorStop(1, '#0b010b');
+            oCtx.fillStyle = grad; oCtx.fillRect(0, 0, w, h);
+            stars.forEach(s => { s.alpha += s.speed; const brightness = 150 + Math.sin(s.alpha) * 105; oCtx.fillStyle = `rgb(${brightness}, ${brightness * 0.7}, ${brightness})`; oCtx.fillRect(Math.floor(s.x), Math.floor(s.y), 1, 1); });
+            fairies.forEach(f => { f.x = (f.x + f.vx + w) % w; f.y = (f.y + f.vy + h) % h; const flicker = Math.sin(Date.now() * 0.02) > 0; oCtx.fillStyle = flicker ? '#fff' : f.color; oCtx.fillRect(Math.floor(f.x), Math.floor(f.y), 1, 1); });
             const srcData = oCtx.getImageData(0, 0, w, h).data;
-            const output = bgCtx.createImageData(w, h);
-            const dst = output.data;
-
+            const output = bgCtx.createImageData(w, h), dst = output.data;
             for (let i = 0; i < w * h; i++) {
-                const u = Math.max(0, Math.min(w - 1, landingWarpData[i * 2]));
-                const v = Math.max(0, Math.min(h - 1, landingWarpData[i * 2 + 1]));
-                const x1 = Math.floor(u), y1 = Math.floor(v);
+                const x1 = Math.floor(Math.max(0, Math.min(w - 1, landingWarpData[i * 2]))), y1 = Math.floor(Math.max(0, Math.min(h - 1, landingWarpData[i * 2 + 1])));
                 const o = i * 4, p = (y1 * w + x1) * 4;
                 dst[o] = srcData[p]; dst[o+1] = srcData[p+1]; dst[o+2] = srcData[p+2]; dst[o+3] = 255;
             }
             bgCtx.putImageData(output, 0, 0);
-
             requestAnimationFrame(drawBackground);
         }
 
-        initBackground();
+        async function saveToLibrary() {
+            if (isSaving || !isRunning) return;
+            isSaving = true;
+            
+            // Visual Flash
+            const flash = document.getElementById('captureFlash');
+            flash.style.opacity = '1';
+            setTimeout(() => flash.style.opacity = '0', 100);
+            savingLoader.style.display = 'block';
 
-        document.body.addEventListener('click', async () => {
-            if (initialized) return;
+            const snapshot = canvas.toDataURL('image/jpeg', 0.7);
+            
+            try {
+                const { db, auth, appId, collection, addDoc } = window.fb;
+                if (!auth.currentUser) return;
+                
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'library'), {
+                    image: snapshot,
+                    timestamp: Date.now(),
+                    userId: auth.currentUser.uid
+                });
+
+                // Transition to Library
+                isRunning = false;
+                canvasWrapper.classList.remove('active');
+                libraryOverlay.style.display = 'flex';
+                loadLibrary();
+            } catch (e) {
+                console.error(e);
+                isSaving = false;
+                savingLoader.style.display = 'none';
+            }
+        }
+
+        function loadLibrary() {
+            const { db, appId, collection, onSnapshot, query } = window.fb;
+            const q = collection(db, 'artifacts', appId, 'public', 'data', 'library');
+            
+            onSnapshot(q, (snapshot) => {
+                galleryGrid.innerHTML = '';
+                // Simple memory sort since we can't use orderBy in Rule 2
+                const docs = snapshot.docs.map(d => d.data()).sort((a,b) => b.timestamp - a.timestamp);
+                docs.forEach(data => {
+                    const div = document.createElement('div');
+                    div.className = 'gallery-item';
+                    const img = document.createElement('img');
+                    img.src = data.image;
+                    div.appendChild(img);
+                    galleryGrid.appendChild(div);
+                });
+            }, (err) => console.error(err));
+        }
+
+        async function startApp() {
+            if (initialized) {
+                if (isRunning) saveToLibrary();
+                return;
+            }
             initialized = true;
-            loadingStatus.classList.remove('hidden');
-
+            uiContainer.classList.add('fade-out');
             try {
                 await initAI();
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { width: 1280, height: 720, facingMode: "user" } 
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: "user" } });
                 video.srcObject = stream;
                 await video.play();
-
                 setupCanvasDimensions(video.videoWidth, video.videoHeight);
                 initializeWarpBuffers();
-                
                 landingOverlay.style.opacity = '0';
-                setTimeout(() => {
-                    landingOverlay.style.display = 'none';
-                    canvasWrapper.classList.add('active');
-                }, 1200);
-
+                setTimeout(() => { landingOverlay.style.display = 'none'; canvasWrapper.classList.add('active'); }, 1000);
                 isRunning = true;
-                
-                const camera = new Camera(video, {
-                    onFrame: async () => {
-                        if (isRunning) {
-                            await hands.send({image: video});
-                            await faceMesh.send({image: video});
-                            processLoop();
-                        }
-                    },
-                    width: video.videoWidth, height: video.videoHeight
-                });
-                camera.start();
+                new Camera(video, { onFrame: async () => { if (isRunning) { await hands.send({image: video}); await faceMesh.send({image: video}); processLoop(); } }, width: video.videoWidth, height: video.videoHeight }).start();
+            } catch (err) { console.error(err); initialized = false; uiContainer.classList.remove('fade-out'); }
+        }
 
-            } catch (err) {
-                console.error(err);
-                loadingStatus.innerText = "CAMERA ACCESS DENIED";
-                loadingStatus.style.color = "red";
-                initialized = false;
-            }
-        });
+        document.body.addEventListener('click', startApp);
 
         async function initAI() {
             hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
             hands.setOptions({ maxNumHands: 4, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
             hands.onResults(onHandResults);
-
             faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
             faceMesh.setOptions({ maxNumFaces: 4, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
             faceMesh.onResults(onFaceResults);
         }
 
         function onHandResults(results) {
-            activeHands = [];
-            const multiHandLandmarks = results.multiHandLandmarks || [];
-            const isGlobalPinch = multiHandLandmarks.length === 2;
-
-            multiHandLandmarks.forEach(landmark => {
-                const tip = landmark[8]; 
-                const fingerCount = countFingers(landmark);
-                let mode = isGlobalPinch ? 'pinch' : (fingerCount === 5 ? 'twirl' : 'none');
-
-                activeHands.push({ 
-                    x: (1 - tip.x) * canvas.width, 
-                    y: tip.y * canvas.height,
-                    mode: mode
-                });
-            });
+            activeHands = (results.multiHandLandmarks || []).map(landmark => ({
+                x: (1 - landmark[8].x) * canvas.width, y: landmark[8].y * canvas.height,
+                mode: results.multiHandLandmarks.length === 2 ? 'pinch' : (countFingers(landmark) === 5 ? 'twirl' : 'none')
+            }));
         }
 
         function onFaceResults(results) {
             activeEyes = [];
-            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-                results.multiFaceLandmarks.forEach(landmarks => {
-                    const lx = (landmarks[33].x + landmarks[133].x) / 2;
-                    const ly = (landmarks[159].y + landmarks[145].y) / 2;
-                    const rx = (landmarks[362].x + landmarks[263].x) / 2;
-                    const ry = (landmarks[386].y + landmarks[374].y) / 2;
-                    activeEyes.push({ x: (1 - lx) * canvas.width, y: ly * canvas.height });
-                    activeEyes.push({ x: (1 - rx) * canvas.width, y: ry * canvas.height });
-                });
-            }
+            (results.multiFaceLandmarks || []).forEach(landmarks => {
+                activeEyes.push({ x: (1 - (landmarks[33].x + landmarks[133].x) / 2) * canvas.width, y: (landmarks[159].y + landmarks[145].y) / 2 * canvas.height });
+                activeEyes.push({ x: (1 - (landmarks[362].x + landmarks[263].x) / 2) * canvas.width, y: (landmarks[386].y + landmarks[374].y) / 2 * canvas.height });
+            });
         }
 
         function countFingers(landmarks) {
@@ -369,91 +384,52 @@
         function initializeWarpBuffers() {
             const w = canvas.width, h = canvas.height;
             persistentWarpData = new Float32Array(w * h * 2);
-            for (let i = 0; i < w * h; i++) {
-                persistentWarpData[i * 2] = i % w;
-                persistentWarpData[i * 2 + 1] = Math.floor(i / w);
-            }
+            for (let i = 0; i < w * h; i++) { persistentWarpData[i * 2] = i % w; persistentWarpData[i * 2 + 1] = Math.floor(i / w); }
         }
 
         function updateWarpMap() {
             if (!persistentWarpData) return;
             const w = canvas.width, h = canvas.height;
-
             activeHands.forEach(hand => {
                 if (hand.mode === 'none') return;
-                const radius = 130, strength = 0.05;
-                const sX = Math.max(0, hand.x - radius), eX = Math.min(w, hand.x + radius);
-                const sY = Math.max(0, hand.y - radius), eY = Math.min(h, hand.y + radius);
+                const radius = 130, strength = 0.05, sX = Math.max(0, hand.x - radius), eX = Math.min(w, hand.x + radius), sY = Math.max(0, hand.y - radius), eY = Math.min(h, hand.y + radius);
                 for (let y = sY; y < eY; y++) {
                     for (let x = sX; x < eX; x++) {
                         const dx = x - hand.x, dy = y - hand.y, d = Math.sqrt(dx*dx + dy*dy);
                         if (d < radius) {
-                            const amt = (radius - d) / radius;
-                            const idx = (Math.floor(y)*w + Math.floor(x))*2;
-                            if (hand.mode === 'pinch') {
-                                persistentWarpData[idx] += (persistentWarpData[idx] - hand.x) * amt * strength;
-                                persistentWarpData[idx+1] += (persistentWarpData[idx+1] - hand.y) * amt * strength;
-                            } else if (hand.mode === 'twirl') {
-                                const a = amt * 0.1, c = Math.cos(a), s = Math.sin(a);
-                                const du = persistentWarpData[idx] - hand.x, dv = persistentWarpData[idx+1] - hand.y;
-                                persistentWarpData[idx] = hand.x + (du * c - dv * s);
-                                persistentWarpData[idx+1] = hand.y + (du * s + dv * c);
-                            }
+                            const amt = (radius - d) / radius, idx = (Math.floor(y)*w + Math.floor(x))*2;
+                            if (hand.mode === 'pinch') { persistentWarpData[idx] += (persistentWarpData[idx] - hand.x) * amt * strength; persistentWarpData[idx+1] += (persistentWarpData[idx+1] - hand.y) * amt * strength; }
+                            else if (hand.mode === 'twirl') { const a = amt * 0.1, c = Math.cos(a), s = Math.sin(a), du = persistentWarpData[idx] - hand.x, dv = persistentWarpData[idx+1] - hand.y; persistentWarpData[idx] = hand.x + (du * c - dv * s); persistentWarpData[idx+1] = hand.y + (du * s + dv * c); }
                         }
                     }
                 }
             });
-
             activeEyes.forEach(eye => {
-                const r = 50; 
-                const sX = Math.max(0, eye.x - r), eX = Math.min(w, eye.x + r);
-                const sY = Math.max(0, eye.y - r), eY = Math.min(h, eye.y + r);
+                const r = 50, sX = Math.max(0, eye.x - r), eX = Math.min(w, eye.x + r), sY = Math.max(0, eye.y - r), eY = Math.min(h, eye.y + r);
                 for (let y = sY; y < eY; y++) {
                     for (let x = sX; x < eX; x++) {
                         const dx = x - eye.x, dy = y - eye.y, d = Math.sqrt(dx*dx + dy*dy);
-                        if (d < r) {
-                            const idx = (Math.floor(y)*w + Math.floor(x))*2;
-                            const ripple = Math.sin(d * 0.2 - frameCount * 0.15) * (r - d) * 0.05;
-                            persistentWarpData[idx] += ripple * (dx / d);
-                            persistentWarpData[idx+1] += ripple * (dy / d);
-                        }
+                        if (d < r) { const idx = (Math.floor(y)*w + Math.floor(x))*2, ripple = Math.sin(d * 0.2 - frameCount * 0.15) * (r - d) * 0.05; persistentWarpData[idx] += ripple * (dx / d); persistentWarpData[idx+1] += ripple * (dy / d); }
                     }
                 }
             });
         }
 
         function processLoop() {
-            const w = canvas.width, h = canvas.height;
-            const off = document.createElement('canvas'); off.width = w; off.height = h;
-            const oCtx = off.getContext('2d');
-            oCtx.translate(w, 0); oCtx.scale(-1, 1);
-            oCtx.drawImage(video, 0, 0, w, h);
-            
-            const src = oCtx.getImageData(0, 0, w, h).data;
-            const output = ctx.createImageData(w, h);
-            const dst = output.data;
-
+            const w = canvas.width, h = canvas.height, off = document.createElement('canvas'); off.width = w; off.height = h;
+            const oCtx = off.getContext('2d'); oCtx.translate(w, 0); oCtx.scale(-1, 1); oCtx.drawImage(video, 0, 0, w, h);
+            const src = oCtx.getImageData(0, 0, w, h).data, output = ctx.createImageData(w, h), dst = output.data;
             updateWarpMap();
-
             for (let i = 0; i < w * h; i++) {
-                const u = Math.max(0, Math.min(w - 1, persistentWarpData[i*2]));
-                const v = Math.max(0, Math.min(h - 1, persistentWarpData[i*2+1]));
+                const u = Math.max(0, Math.min(w - 1, persistentWarpData[i*2])), v = Math.max(0, Math.min(h - 1, persistentWarpData[i*2+1]));
                 const x1 = Math.floor(u), y1 = Math.floor(v), o = i * 4, p = (y1*w+x1)*4;
                 dst[o] = src[p]; dst[o+1] = src[p+1]; dst[o+2] = src[p+2]; dst[o+3] = 255;
             }
             ctx.putImageData(output, 0, 0);
         }
 
-        window.onresize = () => {
-            const w = bgCanvas.width = window.innerWidth / 4;
-            const h = bgCanvas.height = window.innerHeight / 4;
-            landingWarpData = new Float32Array(w * h * 2);
-            for (let i = 0; i < w * h; i++) {
-                landingWarpData[i * 2] = i % w;
-                landingWarpData[i * 2 + 1] = Math.floor(i / w);
-            }
-            if (isRunning && video.videoWidth) setupCanvasDimensions(video.videoWidth, video.videoHeight);
-        };
+        initBackground();
+        window.onresize = () => { initBackground(); if (isRunning && video.videoWidth) setupCanvasDimensions(video.videoWidth, video.videoHeight); };
     </script>
 </body>
 </html>
