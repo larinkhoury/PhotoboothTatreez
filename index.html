@@ -9,6 +9,75 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { initializeFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global diagnostic trackers to expose connection issues to the main script
+        window.firebaseInitError = null;
+        window.firebaseAuthError = null;
+
+        // SAFE CHECKS: We use 'window.property' checks so they never throw ReferenceErrors if undefined
+        const firebaseConfig = (typeof window.__firebase_config !== 'undefined' && window.__firebase_config)
+            ? JSON.parse(window.__firebase_config)
+            : {
+                apiKey: "AIzaSyCo2QGpLgQnWxmA88B-oVgx8f-oECPHz00",
+                authDomain: "warping-superpowers.firebaseapp.com",
+                projectId: "warping-superpowers",
+                storageBucket: "warping-superpowers.firebasestorage.app",
+                messagingSenderId: "453363038541",
+                appId: "1:453363038541:web:dcdf127a9a10a1b018df04",
+                measurementId: "G-31JBZVZJQD"
+            };
+        
+        const appId = (typeof window.__app_id !== 'undefined' && window.__app_id) ? window.__app_id : 'warping-superpowers';
+
+        let db, auth;
+        try {
+            const app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            
+            // Force long-polling to bypass WebSocket/WebChannel locks on hosting platforms like GitHub Pages
+            db = initializeFirestore(app, {
+                experimentalForceLongPolling: true
+            });
+            
+            // Expose DB reference securely to window.fb
+            window.fb = { db, auth, appId, collection, addDoc, onSnapshot };
+
+            // Secure Authentication Flow with Sandbox Fallback
+            const initAuth = async () => {
+                try {
+                    if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+                        try {
+                            await signInWithCustomToken(auth, window.__initial_auth_token);
+                        } catch (tokenErr) {
+                            console.warn("Custom token mismatch. Falling back to Anonymous Auth...", tokenErr);
+                            await signInAnonymously(auth);
+                        }
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (err) {
+                    console.error("Auth failed:", err);
+                    window.firebaseAuthError = err.code || err.message;
+                }
+            };
+
+            onAuthStateChanged(auth, (user) => {
+                if (user && window.onAuthSuccess) {
+                    window.onAuthSuccess(user);
+                }
+            });
+
+            initAuth();
+        } catch (initErr) {
+            console.error("Firebase init failed:", initErr);
+            window.firebaseInitError = initErr.message;
+        }
+    </script>
+    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Shrikhand&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;700&display=swap');
@@ -204,95 +273,7 @@
 
     <div id="captureFlash"></div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { initializeFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Global diagnostic trackers
-        window.firebaseInitError = null;
-        window.firebaseAuthError = null;
-
-        // Dynamic Firebase Configuration with production keys
-        const firebaseConfig = (typeof __firebase_config !== 'undefined' && __firebase_config)
-            ? JSON.parse(__firebase_config)
-            : {
-                apiKey: "AIzaSyCo2QGpLgQnWxmA88B-oVgx8f-oECPHz00",
-                authDomain: "warping-superpowers.firebaseapp.com",
-                projectId: "warping-superpowers",
-                storageBucket: "warping-superpowers.firebasestorage.app",
-                messagingSenderId: "453363038541",
-                appId: "1:453363038541:web:dcdf127a9a10a1b018df04",
-                measurementId: "G-31JBZVZJQD"
-            };
-        
-        const appId = typeof __app_id !== 'undefined' && __app_id ? __app_id : 'warping-superpowers';
-
-        // 1. Declare diagnostic reporting UI function
-        window.reportErrorToUI = function(title, details) {
-            document.getElementById('errorTitle').innerText = title;
-            document.getElementById('errorDetails').innerText = details;
-            document.getElementById('errorOverlay').classList.remove('hidden');
-            document.getElementById('errorOverlay').classList.add('flex');
-            isSaving = false;
-            savingLoader.style.display = 'none';
-        };
-
-        window.hideErrorOverlay = function() {
-            const overlay = document.getElementById('errorOverlay');
-            overlay.classList.remove('flex');
-            overlay.classList.add('hidden');
-        };
-
-        document.getElementById('dismissErrorBtn').addEventListener('click', () => {
-            window.hideErrorOverlay();
-        });
-
-        // 2. Initialize App and Firestore with Long-Polling enabled to force WebSocket bypass
-        let db, auth;
-        try {
-            const app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            
-            // CRITICAL FIX: Force long polling to bypass WebChannel stream locks in previews and on GH Pages
-            db = initializeFirestore(app, {
-                experimentalForceLongPolling: true
-            });
-            
-            window.fb = { db, auth, appId, collection, addDoc, onSnapshot };
-
-            // Secure Auth Flow with Sandbox Fallback
-            const initAuth = async () => {
-                try {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        try {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                        } catch (tokenErr) {
-                            console.warn("Custom token mismatch. Falling back to Anonymous Auth...", tokenErr);
-                            await signInAnonymously(auth);
-                        }
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                } catch (err) {
-                    console.error("Auth failed:", err);
-                    window.firebaseAuthError = err.code || err.message;
-                    window.reportErrorToUI("Authentication Failed", err.message + " (Code: " + (err.code || "unknown") + ")");
-                }
-            };
-
-            onAuthStateChanged(auth, (user) => {
-                if (user && window.onAuthSuccess) {
-                    window.onAuthSuccess(user);
-                }
-            });
-
-            initAuth();
-        } catch (initErr) {
-            console.error("Firebase init failed:", initErr);
-            window.firebaseInitError = initErr.message;
-        }
-
+    <script>
         const canvas = document.getElementById('mainCanvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         const bgCanvas = document.getElementById('bgCanvas');
@@ -318,6 +299,26 @@
 
         const fairies = [];
         const stars = [];
+
+        // Exposing error overlay controls globally to bypass context errors
+        window.reportErrorToUI = function(title, details) {
+            document.getElementById('errorTitle').innerText = title;
+            document.getElementById('errorDetails').innerText = details;
+            document.getElementById('errorOverlay').classList.remove('hidden');
+            document.getElementById('errorOverlay').classList.add('flex');
+            isSaving = false;
+            savingLoader.style.display = 'none';
+        };
+
+        window.hideErrorOverlay = function() {
+            const overlay = document.getElementById('errorOverlay');
+            overlay.classList.remove('flex');
+            overlay.classList.add('hidden');
+        };
+
+        document.getElementById('dismissErrorBtn').addEventListener('click', () => {
+            window.hideErrorOverlay();
+        });
 
         function initBackground() {
             const w = bgCanvas.width = Math.max(32, Math.floor(window.innerWidth / 4)); 
@@ -382,15 +383,19 @@
             const snapshot = canvas.toDataURL('image/jpeg', 0.6);
             
             try {
+                // Safeguards against reference/initialization crashes
                 if (window.firebaseInitError) {
                     throw new Error("Init Error: " + window.firebaseInitError);
                 }
                 if (window.firebaseAuthError) {
                     throw new Error("Auth Error: " + window.firebaseAuthError);
                 }
+                if (!window.fb) {
+                    throw new Error("Database interface failed to load.");
+                }
 
                 const { db, auth, appId, collection, addDoc } = window.fb;
-                if (!auth.currentUser) throw new Error("Auth not ready yet");
+                if (!auth.currentUser) throw new Error("Authentication not ready. Please try clicking again.");
                 
                 const savePromise = addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'library'), {
                     image: snapshot,
@@ -398,7 +403,7 @@
                     userId: auth.currentUser.uid
                 });
 
-                // Abort promise if server blocks the response for more than 6 seconds
+                // Fail fast rather than hanging infinitely
                 const timeoutPromise = new Promise((_, reject) => 
                     setTimeout(() => reject(new Error("Timeout: Firestore did not respond in 6 seconds.")), 6000)
                 );
@@ -418,6 +423,7 @@
         let unsubscribeLibrary = null;
         function loadLibrary() {
             try {
+                if (!window.fb) return;
                 const { db, appId, collection, onSnapshot, query, auth } = window.fb;
                 if (!auth.currentUser) return;
 
@@ -439,7 +445,7 @@
                     });
                 }, (err) => {
                     console.error("Library sync error:", err);
-                    document.getElementById('loadingStatus').innerText = "Database sync issue. Click TRY AGAIN.";
+                    document.getElementById('loadingStatus').innerText = "Sync issue. Click TRY AGAIN to reload.";
                     window.reportErrorToUI("Read Permission Denied", err.message + " (Check Firestore Rules)");
                 });
             } catch (err) {
@@ -449,6 +455,7 @@
         }
 
         async function startApp() {
+            // Handle pre-start configuration block errors instantly
             if (window.firebaseInitError) {
                 window.reportErrorToUI("Firebase Initialization Error", window.firebaseInitError);
                 return;
