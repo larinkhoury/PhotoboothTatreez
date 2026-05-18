@@ -8,22 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Firebase Setup
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-        window.fb = { db, auth, appId, collection, addDoc, onSnapshot, query, limit };
-        
-        signInAnonymously(auth).catch(console.error);
-    </script>
+    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Shrikhand&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;700&display=swap');
@@ -110,7 +95,6 @@
 
         @keyframes shine { to { background-position: 200% center; } }
 
-        /* Gallery/Library View */
         #libraryOverlay {
             position: absolute;
             inset: 0;
@@ -141,7 +125,6 @@
             transition: transform 0.3s ease;
         }
 
-        .gallery-item:hover { transform: scale(1.03); }
         .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
 
         #captureFlash {
@@ -166,7 +149,6 @@
             z-index: 3001;
             display: none;
         }
-
     </style>
 </head>
 <body>
@@ -181,7 +163,7 @@
     <div id="canvasWrapper" class="canvas-wrapper">
         <canvas id="mainCanvas"></canvas>
         <video id="hiddenVideo" style="display:none" autoplay playsinline muted></video>
-        <div class="saving-loader" id="savingLoader">SAVING TO LIBRARY...</div>
+        <div class="saving-loader" id="savingLoader">SAVING TO GALLERY...</div>
     </div>
 
     <div id="libraryOverlay">
@@ -189,12 +171,128 @@
             <h2 class="hero-text !text-4xl">the library</h2>
             <button onclick="location.reload()" class="bg-pink-600 text-white px-6 py-2 rounded-full font-bold hover:bg-pink-500 transition">TRY AGAIN</button>
         </div>
+        <div id="loadingStatus" class="text-pink-400 animate-pulse text-sm">Entering archives...</div>
         <div class="gallery-grid" id="galleryGrid"></div>
+    </div>
+
+    <!-- Interactive Diagnostics Error Overlay -->
+    <div id="errorOverlay" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[4000] hidden flex-col items-center justify-center p-6 text-center">
+        <div class="bg-[#1c011c] border-2 border-pink-500 rounded-2xl p-8 max-w-md w-full shadow-[0_0_40px_rgba(255,105,180,0.4)]">
+            <div class="text-pink-500 text-5xl mb-4">🔮</div>
+            <h3 class="font-bold text-xl text-pink-400 mb-2 tracking-wider uppercase">Connection Delayed</h3>
+            
+            <!-- Live Error details printed here -->
+            <div class="bg-black/50 p-3 rounded-lg border border-pink-500/20 my-4 text-left">
+                <span class="text-xs text-pink-400 font-bold block mb-1">LIVE DIAGNOSTIC REPORT:</span>
+                <p id="errorTitle" class="text-sm font-bold text-white mb-1">Database Timeout</p>
+                <p id="errorDetails" class="text-xs text-gray-400 font-mono break-words">The request to write to your Firestore database took longer than 6 seconds.</p>
+            </div>
+
+            <p class="text-xs text-gray-300 leading-relaxed mb-6 font-sans">
+                To fix this, log into your Firebase console and double-check your current settings:
+            </p>
+            <div class="text-left font-sans text-[11px] text-pink-300/90 space-y-3 mb-6 bg-pink-950/20 p-4 rounded-xl border border-pink-500/20">
+                <p>• <strong>Authentication:</strong> Go to Authentication > Sign-In Method, click <strong>"Anonymous"</strong>, and ensure it is set to <strong>"Enabled"</strong>.</p>
+                <p>• <strong>Firestore Rules:</strong> Rules must permit writes to `artifacts/warping-superpowers/public/data/library` (Check Rules Tab in Firestore).</p>
+                <p>• <strong>Database Instance:</strong> Ensure you have clicked "Create Database" in Firestore and selected "Native Mode".</p>
+            </div>
+            <button id="dismissErrorBtn" class="bg-pink-600 hover:bg-pink-500 text-white font-bold px-8 py-2.5 rounded-full tracking-wider transition uppercase text-xs">
+                Dismiss
+            </button>
+        </div>
     </div>
 
     <div id="captureFlash"></div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { initializeFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global diagnostic trackers
+        window.firebaseInitError = null;
+        window.firebaseAuthError = null;
+
+        // Dynamic Firebase Configuration with production keys
+        const firebaseConfig = (typeof __firebase_config !== 'undefined' && __firebase_config)
+            ? JSON.parse(__firebase_config)
+            : {
+                apiKey: "AIzaSyCo2QGpLgQnWxmA88B-oVgx8f-oECPHz00",
+                authDomain: "warping-superpowers.firebaseapp.com",
+                projectId: "warping-superpowers",
+                storageBucket: "warping-superpowers.firebasestorage.app",
+                messagingSenderId: "453363038541",
+                appId: "1:453363038541:web:dcdf127a9a10a1b018df04",
+                measurementId: "G-31JBZVZJQD"
+            };
+        
+        const appId = typeof __app_id !== 'undefined' && __app_id ? __app_id : 'warping-superpowers';
+
+        // 1. Declare diagnostic reporting UI function
+        window.reportErrorToUI = function(title, details) {
+            document.getElementById('errorTitle').innerText = title;
+            document.getElementById('errorDetails').innerText = details;
+            document.getElementById('errorOverlay').classList.remove('hidden');
+            document.getElementById('errorOverlay').classList.add('flex');
+            isSaving = false;
+            savingLoader.style.display = 'none';
+        };
+
+        window.hideErrorOverlay = function() {
+            const overlay = document.getElementById('errorOverlay');
+            overlay.classList.remove('flex');
+            overlay.classList.add('hidden');
+        };
+
+        document.getElementById('dismissErrorBtn').addEventListener('click', () => {
+            window.hideErrorOverlay();
+        });
+
+        // 2. Initialize App and Firestore with Long-Polling enabled to force WebSocket bypass
+        let db, auth;
+        try {
+            const app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            
+            // CRITICAL FIX: Force long polling to bypass WebChannel stream locks in previews and on GH Pages
+            db = initializeFirestore(app, {
+                experimentalForceLongPolling: true
+            });
+            
+            window.fb = { db, auth, appId, collection, addDoc, onSnapshot };
+
+            // Secure Auth Flow with Sandbox Fallback
+            const initAuth = async () => {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        try {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } catch (tokenErr) {
+                            console.warn("Custom token mismatch. Falling back to Anonymous Auth...", tokenErr);
+                            await signInAnonymously(auth);
+                        }
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (err) {
+                    console.error("Auth failed:", err);
+                    window.firebaseAuthError = err.code || err.message;
+                    window.reportErrorToUI("Authentication Failed", err.message + " (Code: " + (err.code || "unknown") + ")");
+                }
+            };
+
+            onAuthStateChanged(auth, (user) => {
+                if (user && window.onAuthSuccess) {
+                    window.onAuthSuccess(user);
+                }
+            });
+
+            initAuth();
+        } catch (initErr) {
+            console.error("Firebase init failed:", initErr);
+            window.firebaseInitError = initErr.message;
+        }
+
         const canvas = document.getElementById('mainCanvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         const bgCanvas = document.getElementById('bgCanvas');
@@ -222,8 +320,8 @@
         const stars = [];
 
         function initBackground() {
-            const w = bgCanvas.width = window.innerWidth / 4; 
-            const h = bgCanvas.height = window.innerHeight / 4;
+            const w = bgCanvas.width = Math.max(32, Math.floor(window.innerWidth / 4)); 
+            const h = bgCanvas.height = Math.max(32, Math.floor(window.innerHeight / 4));
             landingWarpData = new Float32Array(w * h * 2);
             const centerX = w / 2, centerY = h / 2, radius = w * 0.9;
             for (let y = 0; y < h; y++) {
@@ -249,6 +347,10 @@
         function drawBackground() {
             if(initialized && landingOverlay.style.display === 'none') return;
             const w = bgCanvas.width, h = bgCanvas.height;
+            if (w <= 0 || h <= 0) {
+                requestAnimationFrame(drawBackground);
+                return;
+            }
             frameCount++;
             const off = document.createElement('canvas'); off.width = w; off.height = h;
             const oCtx = off.getContext('2d');
@@ -272,56 +374,85 @@
             if (isSaving || !isRunning) return;
             isSaving = true;
             
-            // Visual Flash
             const flash = document.getElementById('captureFlash');
             flash.style.opacity = '1';
             setTimeout(() => flash.style.opacity = '0', 100);
             savingLoader.style.display = 'block';
 
-            const snapshot = canvas.toDataURL('image/jpeg', 0.7);
+            const snapshot = canvas.toDataURL('image/jpeg', 0.6);
             
             try {
+                if (window.firebaseInitError) {
+                    throw new Error("Init Error: " + window.firebaseInitError);
+                }
+                if (window.firebaseAuthError) {
+                    throw new Error("Auth Error: " + window.firebaseAuthError);
+                }
+
                 const { db, auth, appId, collection, addDoc } = window.fb;
-                if (!auth.currentUser) return;
+                if (!auth.currentUser) throw new Error("Auth not ready yet");
                 
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'library'), {
+                const savePromise = addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'library'), {
                     image: snapshot,
                     timestamp: Date.now(),
                     userId: auth.currentUser.uid
                 });
 
-                // Transition to Library
+                // Abort promise if server blocks the response for more than 6 seconds
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("Timeout: Firestore did not respond in 6 seconds.")), 6000)
+                );
+
+                await Promise.race([savePromise, timeoutPromise]);
+
                 isRunning = false;
                 canvasWrapper.classList.remove('active');
                 libraryOverlay.style.display = 'flex';
                 loadLibrary();
             } catch (e) {
-                console.error(e);
-                isSaving = false;
-                savingLoader.style.display = 'none';
+                console.error("Save failed:", e);
+                window.reportErrorToUI("Save to Database Failed", e.code ? `${e.message} (Code: ${e.code})` : e.message);
             }
         }
 
+        let unsubscribeLibrary = null;
         function loadLibrary() {
-            const { db, appId, collection, onSnapshot, query } = window.fb;
-            const q = collection(db, 'artifacts', appId, 'public', 'data', 'library');
-            
-            onSnapshot(q, (snapshot) => {
-                galleryGrid.innerHTML = '';
-                // Simple memory sort since we can't use orderBy in Rule 2
-                const docs = snapshot.docs.map(d => d.data()).sort((a,b) => b.timestamp - a.timestamp);
-                docs.forEach(data => {
-                    const div = document.createElement('div');
-                    div.className = 'gallery-item';
-                    const img = document.createElement('img');
-                    img.src = data.image;
-                    div.appendChild(img);
-                    galleryGrid.appendChild(div);
+            try {
+                const { db, appId, collection, onSnapshot, query, auth } = window.fb;
+                if (!auth.currentUser) return;
+
+                const q = collection(db, 'artifacts', appId, 'public', 'data', 'library');
+                
+                if (unsubscribeLibrary) unsubscribeLibrary();
+                
+                unsubscribeLibrary = onSnapshot(q, (snapshot) => {
+                    document.getElementById('loadingStatus').style.display = 'none';
+                    galleryGrid.innerHTML = '';
+                    const docs = snapshot.docs.map(d => d.data()).sort((a,b) => b.timestamp - a.timestamp);
+                    docs.forEach(data => {
+                        const div = document.createElement('div');
+                        div.className = 'gallery-item';
+                        const img = document.createElement('img');
+                        img.src = data.image;
+                        div.appendChild(img);
+                        galleryGrid.appendChild(div);
+                    });
+                }, (err) => {
+                    console.error("Library sync error:", err);
+                    document.getElementById('loadingStatus').innerText = "Database sync issue. Click TRY AGAIN.";
+                    window.reportErrorToUI("Read Permission Denied", err.message + " (Check Firestore Rules)");
                 });
-            }, (err) => console.error(err));
+            } catch (err) {
+                console.error("Load library failed:", err);
+                window.reportErrorToUI("Initialization Error", err.message);
+            }
         }
 
         async function startApp() {
+            if (window.firebaseInitError) {
+                window.reportErrorToUI("Firebase Initialization Error", window.firebaseInitError);
+                return;
+            }
             if (initialized) {
                 if (isRunning) saveToLibrary();
                 return;
