@@ -415,7 +415,6 @@
             });
         }
 
-        
         function processLoop() {
             const w = canvas.width, h = canvas.height, off = document.createElement('canvas'); off.width = w; off.height = h;
             const oCtx = off.getContext('2d'); oCtx.translate(w, 0); oCtx.scale(-1, 1); oCtx.drawImage(video, 0, 0, w, h);
