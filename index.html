@@ -167,10 +167,28 @@
     padding: 13px 26px;
     border-radius: 2px;
     box-shadow: 0 3px 0 var(--thread-dark);
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
   }
   .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 0 var(--thread-dark); }
   .btn-primary:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--thread-dark); }
-  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary:disabled { opacity: 0.7; cursor: wait; }
+
+  .btn-spinner {
+    display: none;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.35);
+    border-top-color: var(--white);
+    border-radius: 50%;
+    animation: btn-spin 0.7s linear infinite;
+  }
+  .btn-primary.is-loading .btn-spinner { display: inline-block; }
+
+  @keyframes btn-spin {
+    to { transform: rotate(360deg); }
+  }
 
   .btn-ghost {
     background: transparent;
@@ -614,9 +632,43 @@
   }
 
   ::selection { background: var(--thread); color: white; }
+
+  /* ============================================================
+     PRINT LAYOUT
+     A hidden full-resolution image, shown only when printing.
+     Sized exactly to 2x3in photo paper with no margins, so the
+     Xiaomi printer gets a clean, full-bleed print with nothing
+     else from the page (UI, buttons, other screens) included.
+     ============================================================ */
+
+  #printImage {
+    display: none;
+  }
+
+  @media print {
+    @page {
+      size: 2in 3in;
+      margin: 0;
+    }
+    body * {
+      visibility: hidden;
+    }
+    #printImage {
+      display: block;
+      visibility: visible;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 2in;
+      height: 3in;
+      object-fit: cover;
+    }
+  }
 </style>
 </head>
 <body>
+
+<img id="printImage" alt="">
 
 <!-- SCREEN 0: LANDING -->
 <div class="screen active" id="screen-landing">
@@ -722,7 +774,10 @@
 
   <div class="result-actions">
     <button class="btn-ghost" id="retakeBtn">Start over</button>
-    <button class="btn-primary" id="downloadBtn">Save postcard</button>
+    <button class="btn-primary" id="downloadBtn">
+      <span class="btn-label">Print</span>
+      <span class="btn-spinner" aria-hidden="true"></span>
+    </button>
   </div>
 </div>
 
@@ -1599,19 +1654,70 @@ document.getElementById('retakeBtn').addEventListener('click', () => {
   initCamera();
 });
 
-document.getElementById('downloadBtn').addEventListener('click', () => {
-  // composite base + stitch canvases into one PNG for download
-  const w = resultBaseCanvas.width, h = resultBaseCanvas.height;
-  const out = document.createElement('canvas');
-  out.width = w; out.height = h;
-  const ctx = out.getContext('2d');
-  ctx.drawImage(resultBaseCanvas, 0, 0);
-  ctx.drawImage(resultStitchCanvas, 0, 0);
-  const link = document.createElement('a');
-  link.download = 'tatreez-photobooth.png';
-  link.href = out.toDataURL('image/png');
-  link.click();
+const printBtn = document.getElementById('downloadBtn');
+const printBtnLabel = printBtn.querySelector('.btn-label');
+
+function setPrintButtonLoading(isLoading) {
+  printBtn.classList.toggle('is-loading', isLoading);
+  printBtn.disabled = isLoading;
+  printBtnLabel.textContent = isLoading ? 'Printing…' : 'Print';
+}
+
+printBtn.addEventListener('click', async () => {
+  setPrintButtonLoading(true);
+
+  try {
+    // composite base + stitch canvases into one PNG
+    const w = resultBaseCanvas.width, h = resultBaseCanvas.height;
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    const ctx = out.getContext('2d');
+    ctx.drawImage(resultBaseCanvas, 0, 0);
+    ctx.drawImage(resultStitchCanvas, 0, 0);
+
+    const blob = await new Promise(resolve => out.toBlob(resolve, 'image/png'));
+    const file = new File([blob], 'tatreez-photobooth.png', { type: 'image/png' });
+
+    // Preferred path, works on iOS Safari: the native share sheet, which
+    // has "Save Image" right there as the only tap needed to get the
+    // photo into the iPad's Photos app — there is no way for a website
+    // to skip that one tap and save silently, this is the closest real
+    // equivalent and the standard way iOS apps hand off images at all.
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: 'Tatreez Photobooth',
+      });
+      setPrintButtonLoading(false);
+      return;
+    }
+
+    // Fallback for browsers without file-sharing support (most desktop
+    // browsers): keep the old behavior — download a copy, and also push
+    // the image to #printImage for kiosk-mode printing setups.
+    const dataUrl = out.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = 'tatreez-photobooth.png';
+    link.href = dataUrl;
+    link.click();
+
+    const printImg = document.getElementById('printImage');
+    await new Promise(resolve => {
+      printImg.onload = resolve;
+      printImg.src = dataUrl;
+    });
+    window.print();
+  } catch (err) {
+    // AbortError fires when the person cancels the share sheet — not a
+    // real error, just don't leave the button stuck in a loading state.
+    if (err && err.name !== 'AbortError') {
+      console.error('Tatreez: print/share failed.', err);
+    }
+  } finally {
+    setPrintButtonLoading(false);
+  }
 });
+
 
 window.addEventListener('resize', () => {
   if (screens.result.classList.contains('active')) drawResult();
