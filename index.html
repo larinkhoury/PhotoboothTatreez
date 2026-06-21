@@ -1,573 +1,1596 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super Powers</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { initializeFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tatreez Photobooth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #EDE7D9;
+    --paper-edge: #DCD4C0;
+    --thread: #A8222E;
+    --thread-dark: #7E1A23;
+    --charcoal: #2B2A28;
+    --gold: #9C7A3C;
+    --sepia-shadow: #C9BFA8;
+    --white: #FAF8F2;
+  }
 
-        // Global diagnostic trackers to expose connection issues to the main script
-        window.firebaseInitError = null;
-        window.firebaseAuthError = null;
+  * { box-sizing: border-box; }
 
-        // SAFE CHECKS: We use 'window.property' checks so they never throw ReferenceErrors if undefined
-        const firebaseConfig = (typeof window.__firebase_config !== 'undefined' && window.__firebase_config)
-            ? JSON.parse(window.__firebase_config)
-            : {
-                apiKey: "AIzaSyCo2QGpLgQnWxmA88B-oVgx8f-oECPHz00",
-                authDomain: "warping-superpowers.firebaseapp.com",
-                projectId: "warping-superpowers",
-                storageBucket: "warping-superpowers.firebasestorage.app",
-                messagingSenderId: "453363038541",
-                appId: "1:453363038541:web:dcdf127a9a10a1b018df04",
-                measurementId: "G-31JBZVZJQD"
-            };
-        
-        const appId = (typeof window.__app_id !== 'undefined' && window.__app_id) ? window.__app_id : 'warping-superpowers';
+  body {
+    margin: 0;
+    background: var(--charcoal);
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(255,255,255,0.04), transparent 40%),
+      radial-gradient(circle at 80% 90%, rgba(255,255,255,0.03), transparent 40%);
+    color: var(--white);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 64px;
+  }
 
-        let db, auth;
-        try {
-            const app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            
-            // Force long-polling to bypass WebSocket/WebChannel locks on hosting platforms like GitHub Pages
-            db = initializeFirestore(app, {
-                experimentalForceLongPolling: true
-            });
-            
-            // Expose DB reference securely to window.fb
-            window.fb = { db, auth, appId, collection, addDoc, onSnapshot };
+  h1, h2, .display {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
 
-            // Secure Authentication Flow with Sandbox Fallback
-            const initAuth = async () => {
-                try {
-                    if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
-                        try {
-                            await signInWithCustomToken(auth, window.__initial_auth_token);
-                        } catch (tokenErr) {
-                            console.warn("Custom token mismatch. Falling back to Anonymous Auth...", tokenErr);
-                            await signInAnonymously(auth);
-                        }
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                } catch (err) {
-                    console.error("Auth failed:", err);
-                    window.firebaseAuthError = err.code || err.message;
-                }
-            };
+  .eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+  }
 
-            onAuthStateChanged(auth, (user) => {
-                if (user && window.onAuthSuccess) {
-                    window.onAuthSuccess(user);
-                }
-            });
+  header {
+    text-align: center;
+    max-width: 480px;
+    margin-bottom: 36px;
+  }
 
-            initAuth();
-        } catch (initErr) {
-            console.error("Firebase init failed:", initErr);
-            window.firebaseInitError = initErr.message;
-        }
-    </script>
-    
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Shrikhand&display=swap');
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;700&display=swap');
+  header h1 {
+    font-size: 32px;
+    margin: 0 0 10px;
+    color: var(--white);
+  }
 
-        body { 
-            background-color: #0b010b; 
-            margin: 0; 
-            overflow: hidden; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            font-family: 'Space Grotesk', sans-serif;
-            color: white;
-            cursor: pointer;
-            -webkit-tap-highlight-color: transparent;
-        }
+  header p {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #C7C3BA;
+    margin: 0;
+  }
 
-        .canvas-wrapper { 
-            position: relative; 
-            width: 100vw; 
-            height: 100vh; 
-            display: none; 
-            justify-content: center; 
-            align-items: center; 
-            opacity: 0;
-            transition: opacity 1s ease;
-        }
+  /* ---- the postcard ---- */
+  .postcard-wrap {
+    position: relative;
+    width: min(380px, 90vw);
+  }
 
-        .canvas-wrapper.active {
-            display: flex;
-            opacity: 1;
-        }
+  .postcard {
+    position: relative;
+    background: var(--paper);
+    padding: 14px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.5) inset,
+      0 18px 40px rgba(0,0,0,0.45);
+    clip-path: polygon(
+      0% 2%, 1.5% 0%, 4% 1%, 7% 0%, 10% 1.2%, 13% 0%, 16% 1%, 19% 0%, 22% 1.2%, 25% 0%,
+      28% 1%, 31% 0%, 34% 1.2%, 37% 0%, 40% 1%, 43% 0%, 46% 1.2%, 49% 0%, 52% 1%, 55% 0%,
+      58% 1.2%, 61% 0%, 64% 1%, 67% 0%, 70% 1.2%, 73% 0%, 76% 1%, 79% 0%, 82% 1.2%, 85% 0%,
+      88% 1%, 91% 0%, 94% 1.2%, 97% 0%, 100% 2%,
+      99% 5%, 100% 8%, 99% 11%, 100% 14%, 99% 17%, 100% 20%, 99% 23%, 100% 26%, 99% 29%,
+      100% 32%, 99% 35%, 100% 38%, 99% 41%, 100% 44%, 99% 47%, 100% 50%, 99% 53%, 100% 56%,
+      99% 59%, 100% 62%, 99% 65%, 100% 68%, 99% 71%, 100% 74%, 99% 77%, 100% 80%, 99% 83%,
+      100% 86%, 99% 89%, 100% 92%, 99% 95%, 100% 98%,
+      97% 100%, 94% 99%, 91% 100%, 88% 99%, 85% 100%, 82% 99%, 79% 100%, 76% 99%, 73% 100%,
+      70% 99%, 67% 100%, 64% 99%, 61% 100%, 58% 99%, 55% 100%, 52% 99%, 49% 100%, 46% 99%,
+      43% 100%, 40% 99%, 37% 100%, 34% 99%, 31% 100%, 28% 99%, 25% 100%, 22% 99%, 19% 100%,
+      16% 99%, 13% 100%, 10% 99%, 7% 100%, 4% 99%, 1.5% 100%, 0% 98%,
+      1% 95%, 0% 92%, 1% 89%, 0% 86%, 1% 83%, 0% 80%, 1% 77%, 0% 74%, 1% 71%, 0% 68%,
+      1% 65%, 0% 62%, 1% 59%, 0% 56%, 1% 53%, 0% 50%, 1% 47%, 0% 44%, 1% 41%, 0% 38%,
+      1% 35%, 0% 32%, 1% 29%, 0% 26%, 1% 23%, 0% 20%, 1% 17%, 0% 14%, 1% 11%, 0% 8%, 1% 5%
+    );
+  }
 
-        canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
+  .photo-area {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    background: #1a1a1a;
+    overflow: hidden;
+    border: 10px solid #161412;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+  }
 
-        #landingOverlay { 
-            position: absolute; 
-            inset: 0; 
-            background: radial-gradient(circle at center, #4a004a 0%, #1a001a 100%);
-            display: flex; 
-            flex-direction: column; 
-            justify-content: center; 
-            align-items: center; 
-            z-index: 1000; 
-            transition: opacity 1s ease, transform 1.2s ease;
-            overflow: hidden;
-        }
+  .photo-area video,
+  .photo-area canvas#captureCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
 
-        #bgCanvas {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            filter: contrast(1.3) saturate(1.4) brightness(1.1);
-        }
+  .photo-area canvas#captureCanvas { display: none; }
 
-        .ui-container {
-            position: relative;
-            z-index: 10;
-            text-align: center;
-            padding: 2rem;
-            max-width: 90%;
-            pointer-events: none;
-            transition: opacity 0.5s ease-out;
-        }
+  #stitchCanvas,
+  #resultBaseCanvas,
+  #resultStitchCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
 
-        .ui-container.fade-out { opacity: 0; }
+  #resultBaseCanvas { z-index: 1; }
+  #resultStitchCanvas { z-index: 2; }
 
-        .hero-text {
-            font-family: 'Shrikhand', cursive;
-            font-size: clamp(2.5rem, 10vw, 5rem);
-            line-height: 1.1;
-            color: #ff69b4;
-            background: linear-gradient(to right, #ff00ff 20%, #ff69b4 30%, #ffffff 70%, #ff00ff 80%);
-            background-size: 200% auto;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: shine 3s linear infinite;
-            filter: drop-shadow(0 0 15px rgba(255, 105, 180, 0.6));
-            user-select: none;
-        }
+  .shutter-row {
+    display: flex;
+    justify-content: center;
+    margin-top: 16px;
+  }
 
-        @keyframes shine { to { background-position: 200% center; } }
+  .caption {
+    text-align: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--gold);
+    margin-top: 10px;
+    text-transform: uppercase;
+  }
 
-        #libraryOverlay {
-            position: absolute;
-            inset: 0;
-            background: #0b010b;
-            z-index: 2000;
-            display: none;
-            overflow-y: auto;
-            padding: 2rem;
-            flex-direction: column;
-            align-items: center;
-        }
+  /* ---- buttons ---- */
+  button {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
 
-        .gallery-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 1.5rem;
-            width: 100%;
-            max-width: 1200px;
-            margin-top: 2rem;
-        }
+  .btn-primary {
+    background: var(--thread);
+    color: var(--white);
+    padding: 13px 26px;
+    border-radius: 2px;
+    box-shadow: 0 3px 0 var(--thread-dark);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 0 var(--thread-dark); }
+  .btn-primary:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--thread-dark); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-        .gallery-item {
-            background: #1a001a;
-            border: 1px solid #ff00ff44;
-            border-radius: 12px;
-            overflow: hidden;
-            aspect-ratio: 1;
-            transition: transform 0.3s ease;
-        }
+  .btn-ghost {
+    background: transparent;
+    color: var(--white);
+    border: 1px solid rgba(255,255,255,0.3);
+    padding: 12px 24px;
+    border-radius: 2px;
+  }
+  .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
 
-        .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
+  .shutter-btn {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--white);
+    border: 4px solid var(--thread);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .shutter-btn:hover { transform: scale(1.05); }
+  .shutter-btn:active { transform: scale(0.95); }
 
-        #captureFlash {
-            position: fixed;
-            inset: 0;
-            background: white;
-            z-index: 3000;
-            pointer-events: none;
-            opacity: 0;
-        }
+  /* ---- quiz panel ---- */
+  .quiz-panel {
+    width: min(380px, 90vw);
+    margin-top: 28px;
+  }
 
-        .saving-loader {
-            position: fixed;
-            bottom: 2rem;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 105, 180, 0.9);
-            color: white;
-            padding: 0.5rem 1.5rem;
-            border-radius: 99px;
-            font-weight: bold;
-            z-index: 3001;
-            display: none;
-        }
-    </style>
+  .quiz-progress {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 18px;
+  }
+  .quiz-progress span {
+    flex: 1;
+    height: 3px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .quiz-progress span.done { background: var(--thread); }
+
+  .quiz-question {
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 18px;
+    color: var(--white);
+  }
+
+  .quiz-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .quiz-option {
+    text-align: left;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: var(--white);
+    padding: 14px 16px;
+    border-radius: 3px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .quiz-option:hover {
+    border-color: var(--thread);
+    background: rgba(168,34,46,0.12);
+  }
+
+  /* ---- placement chooser ---- */
+  .placement-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .placement-choice {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: var(--white);
+    padding: 10px 16px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  .placement-choice.active {
+    border-color: var(--thread);
+    background: rgba(168,34,46,0.18);
+    color: var(--gold);
+  }
+
+  .screen { display: none; width: 100%; flex-direction: column; align-items: center; }
+  .screen.active { display: flex; }
+
+  /* ============================================================
+     LANDING SCREEN
+     Breaks out of body's centered-column padding to go full-bleed,
+     since this screen is a scattered editorial field, not a single
+     centered card like the camera/quiz/result screens.
+     ============================================================ */
+
+  #screen-landing {
+    align-items: stretch;
+    width: 100vw;
+    margin: -32px -16px -64px;
+    min-height: 100vh;
+    background: var(--paper);
+    color: var(--charcoal);
+    overflow: hidden;
+  }
+
+  .landing-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 28px clamp(20px, 5vw, 56px) 0;
+    position: relative;
+    z-index: 5;
+  }
+
+  .wordmark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 0.01em;
+    color: var(--charcoal);
+  }
+
+  .logo-flower {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    display: inline-block;
+  }
+  .logo-flower svg { width: 100%; height: 100%; display: block; }
+
+  .landing-nav {
+    display: flex;
+    gap: 28px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: lowercase;
+    color: #6f6a5f;
+  }
+  .landing-nav span,
+  .landing-nav a {
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+    color: inherit;
+    text-decoration: none;
+  }
+  .landing-nav span:hover,
+  .landing-nav a:hover {
+    border-bottom-color: var(--gold);
+    color: var(--charcoal);
+  }
+
+  .about-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(43,42,40,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s ease;
+    z-index: 100;
+    padding: 24px;
+  }
+  .about-overlay.active {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .about-panel {
+    position: relative;
+    background: var(--paper);
+    max-width: 460px;
+    width: 100%;
+    padding: 44px 38px;
+    border-radius: 3px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+    transform: translateY(10px);
+    transition: transform 0.25s ease;
+  }
+  .about-overlay.active .about-panel {
+    transform: translateY(0);
+  }
+
+  .about-close {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    background: none;
+    border: none;
+    font-size: 22px;
+    line-height: 1;
+    color: #8a8378;
+    cursor: pointer;
+  }
+  .about-close:hover { color: var(--thread); }
+
+  .about-eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin: 0 0 10px;
+  }
+  .about-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 26px;
+    color: var(--charcoal);
+    margin: 0 0 16px;
+  }
+  .about-body {
+    font-family: 'Space Mono', monospace;
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: #56514a;
+    margin: 0;
+  }
+
+  .tile-field {
+    position: relative;
+    width: 100%;
+    height: min(78vh, 760px);
+    min-height: 460px;
+  }
+
+  .tile {
+    position: absolute;
+    cursor: default;
+    animation: tile-float 7s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .tile.is-frozen { animation-play-state: paused; }
+
+  @keyframes tile-float {
+    0%, 100% { transform: translate(0, 0) rotate(var(--tile-rot, 0deg)); }
+    50% { transform: translate(0, -10px) rotate(var(--tile-rot, 0deg)); }
+  }
+
+  .tile-motif {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+  }
+  .tile-motif svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 2px 6px rgba(43,42,40,0.18)); }
+
+  .tile-reveal {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 240px;
+    min-height: 140px;
+    transform: translate(-50%, -50%) scale(0.92);
+    background: rgba(43,42,40,0.97);
+    color: var(--white);
+    border-radius: 4px;
+    box-shadow: 0 14px 32px rgba(0,0,0,0.28);
+    padding: 20px 22px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.22s ease, transform 0.22s ease;
+    pointer-events: none;
+    z-index: 20;
+  }
+  .tile.is-frozen .tile-reveal {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  .tile-reveal-eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin: 0 0 8px;
+  }
+  .tile-reveal-name {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 19px;
+    line-height: 1.2;
+    margin: 0 0 10px;
+  }
+  .tile-reveal-desc {
+    font-size: 13px;
+    line-height: 1.55;
+    color: #D9D5CC;
+    margin: 0;
+  }
+
+  .landing-center {
+    position: relative;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin: 0 auto;
+    padding: 0 20px 56px;
+  }
+
+  .enter-link {
+    background: none;
+    border: none;
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: clamp(22px, 4vw, 34px);
+    color: var(--charcoal);
+    cursor: pointer;
+    position: relative;
+    padding: 0 4px 6px;
+    letter-spacing: -0.01em;
+  }
+  .enter-link::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: var(--thread);
+    transform: scaleX(0.18);
+    transform-origin: left;
+    transition: transform 0.3s ease;
+  }
+  .enter-link:hover::after { transform: scaleX(1); }
+
+  .landing-sub {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: #8a8378;
+    margin: 10px 0 0;
+  }
+
+  .camera-header {
+    text-align: center;
+    max-width: 480px;
+    margin-bottom: 36px;
+  }
+
+  @media (max-width: 640px) {
+    .tile-field { height: min(82vh, 640px); }
+    .landing-nav { display: none; }
+  }
+
+
+  .result-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 22px;
+  }
+
+  .reading {
+    width: min(380px, 90vw);
+    margin-top: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .reading-block {
+    width: 100%;
+    text-align: center;
+    padding: 4px 8px;
+  }
+
+  .reading-eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin: 0 0 6px;
+  }
+
+  .reading-title {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--white);
+    margin: 0 0 6px;
+  }
+
+  .reading-desc {
+    font-size: 12px;
+    line-height: 1.6;
+    color: #C7C3BA;
+    max-width: 320px;
+    margin: 0 auto;
+  }
+
+  .reading-divider {
+    width: 56px;
+    height: 1px;
+    background: rgba(255,255,255,0.18);
+    margin: 18px 0;
+  }
+
+  .hint {
+    font-size: 11px;
+    color: #8a867d;
+    text-align: center;
+    margin-top: 14px;
+    max-width: 320px;
+    line-height: 1.5;
+  }
+
+  .stitching-label {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-top: 14px;
+    text-align: center;
+  }
+
+  ::selection { background: var(--thread); color: white; }
+</style>
 </head>
 <body>
 
-    <div id="landingOverlay">
-        <canvas id="bgCanvas"></canvas>
-        <div class="ui-container" id="uiContainer">
-            <h1 class="hero-text">unleash your<br>super powers</h1>
-        </div>
+<!-- SCREEN 0: LANDING -->
+<div class="screen active" id="screen-landing">
+  <div class="landing-topbar">
+    <div class="wordmark">
+      <span class="logo-flower" id="logoFlower" aria-hidden="true"></span>
+      <span>Tatreez Photobooth</span>
     </div>
+    <nav class="landing-nav">
+      <span id="aboutBtn">about</span>
+      <a id="contactBtn" href="https://www.instagram.com/renodoodles/" target="_blank" rel="noopener noreferrer">contact</a>
+    </nav>
+  </div>
 
-    <div id="canvasWrapper" class="canvas-wrapper">
-        <canvas id="mainCanvas"></canvas>
-        <video id="hiddenVideo" style="display:none" autoplay playsinline muted></video>
-        <div class="saving-loader" id="savingLoader">SAVING TO GALLERY...</div>
+  <div class="tile-field" id="tileField" aria-hidden="false"></div>
+
+  <div class="about-overlay" id="aboutOverlay">
+    <div class="about-panel">
+      <button class="about-close" id="aboutClose" aria-label="Close">×</button>
+      <p class="about-eyebrow">About this project</p>
+      <h2 class="about-title">A photobooth that stitches.</h2>
+      <p class="about-body">
+        Tatreez Photobooth is a photobooth that incorporates tatreez — traditional
+        Palestinian cross-stitch embroidery — into your photo. Take a picture,
+        answer a short set of questions about yourself, and the site charts a
+        real tatreez motif onto your portrait in a thread color chosen by your
+        answers. Every motif is built from an authentic stitched pattern, not
+        generated freehand, the same way embroiderers have charted these
+        designs by hand for generations.
+      </p>
     </div>
+  </div>
 
-    <div id="libraryOverlay">
-        <div class="flex justify-between w-full max-w-6xl mb-8">
-            <h2 class="hero-text !text-4xl">the library</h2>
-            <button onclick="location.reload()" class="bg-pink-600 text-white px-6 py-2 rounded-full font-bold hover:bg-pink-500 transition">TRY AGAIN</button>
-        </div>
-        <div id="loadingStatus" class="text-pink-400 animate-pulse text-sm">Entering archives...</div>
-        <div class="gallery-grid" id="galleryGrid"></div>
+  <div class="landing-center">
+    <button class="enter-link" id="enterPhotoboothBtn">Enter the Photobooth</button>
+  </div>
+</div>
+
+<!-- SCREEN 1: CAMERA -->
+<div class="screen" id="screen-camera">
+  <header class="camera-header">
+    <div class="eyebrow">A small embroidery ritual</div>
+    <h1>Tatreez Photobooth</h1>
+    <p>Take a photo, answer a few questions, and receive a hand-charted Palestinian cross-stitch motif — stitched, not generated, the way it's always been done.</p>
+  </header>
+
+  <div class="postcard-wrap">
+    <div class="postcard">
+      <div class="photo-area" id="photoArea">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="captureCanvas"></canvas>
+        <canvas id="stitchCanvas"></canvas>
+      </div>
     </div>
+  </div>
+  <div class="caption" id="cameraCaption">Center your face in frame</div>
+  <div class="shutter-row">
+    <button class="shutter-btn" id="shutterBtn" aria-label="Take photo"></button>
+  </div>
+  <p class="hint" id="cameraHint">Your photo stays on this device — nothing is uploaded.</p>
+</div>
 
-    <!-- Interactive Diagnostics Error Overlay -->
-    <div id="errorOverlay" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[4000] hidden flex-col items-center justify-center p-6 text-center">
-        <div class="bg-[#1c011c] border-2 border-pink-500 rounded-2xl p-8 max-w-md w-full shadow-[0_0_40px_rgba(255,105,180,0.4)]">
-            <div class="text-pink-500 text-5xl mb-4">🔮</div>
-            <h3 class="font-bold text-xl text-pink-400 mb-2 tracking-wider uppercase">Connection Delayed</h3>
-            
-            <!-- Live Error details printed here -->
-            <div class="bg-black/50 p-3 rounded-lg border border-pink-500/20 my-4 text-left">
-                <span class="text-xs text-pink-400 font-bold block mb-1">LIVE DIAGNOSTIC REPORT:</span>
-                <p id="errorTitle" class="text-sm font-bold text-white mb-1">Database Timeout</p>
-                <p id="errorDetails" class="text-xs text-gray-400 font-mono break-words">The request to write to your Firestore database took longer than 6 seconds.</p>
-            </div>
+<!-- SCREEN 2: QUIZ -->
+<div class="screen" id="screen-quiz">
+  <div class="quiz-panel">
+    <div class="quiz-progress" id="quizProgress"></div>
+    <p class="quiz-question" id="quizQuestion"></p>
+    <div class="quiz-options" id="quizOptions"></div>
+  </div>
+</div>
 
-            <p class="text-xs text-gray-300 leading-relaxed mb-6 font-sans">
-                To fix this, log into your Firebase console and double-check your current settings:
-            </p>
-            <div class="text-left font-sans text-[11px] text-pink-300/90 space-y-3 mb-6 bg-pink-950/20 p-4 rounded-xl border border-pink-500/20">
-                <p>• <strong>Authentication:</strong> Go to Authentication > Sign-In Method, click <strong>"Anonymous"</strong>, and ensure it is set to <strong>"Enabled"</strong>.</p>
-                <p>• <strong>Firestore Rules:</strong> Rules must permit writes to `artifacts/warping-superpowers/public/data/library` (Check Rules Tab in Firestore).</p>
-                <p>• <strong>Database Instance:</strong> Ensure you have clicked "Create Database" in Firestore and selected "Native Mode".</p>
-            </div>
-            <button id="dismissErrorBtn" class="bg-pink-600 hover:bg-pink-500 text-white font-bold px-8 py-2.5 rounded-full tracking-wider transition uppercase text-xs">
-                Dismiss
-            </button>
-        </div>
+<!-- SCREEN 3: RESULT -->
+<div class="screen" id="screen-result">
+  <div class="postcard-wrap">
+    <div class="postcard">
+      <div class="photo-area" id="resultPhotoArea">
+        <canvas id="resultBaseCanvas"></canvas>
+        <canvas id="resultStitchCanvas"></canvas>
+      </div>
     </div>
+  </div>
+  <p class="stitching-label" id="stitchingLabel"></p>
 
-    <div id="captureFlash"></div>
+  <div class="reading">
+    <div class="reading-block" id="colorReading">
+      <p class="reading-eyebrow">Your thread</p>
+      <p class="reading-title" id="colorName"></p>
+      <p class="reading-desc" id="colorMeaning"></p>
+    </div>
+    <div class="reading-divider"></div>
+    <div class="reading-block" id="motifReading">
+      <p class="reading-eyebrow">Your motif</p>
+      <p class="reading-title" id="motifName"></p>
+      <p class="reading-desc" id="motifDesc"></p>
+    </div>
+  </div>
 
-    <script>
-        const canvas = document.getElementById('mainCanvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        const bgCanvas = document.getElementById('bgCanvas');
-        const bgCtx = bgCanvas.getContext('2d');
-        const video = document.getElementById('hiddenVideo');
-        const landingOverlay = document.getElementById('landingOverlay');
-        const uiContainer = document.getElementById('uiContainer');
-        const canvasWrapper = document.getElementById('canvasWrapper');
-        const libraryOverlay = document.getElementById('libraryOverlay');
-        const galleryGrid = document.getElementById('galleryGrid');
-        const savingLoader = document.getElementById('savingLoader');
+  <div class="placement-row" id="placementRow">
+    <button class="placement-choice" data-placement="overlay">On the photo</button>
+    <button class="placement-choice" data-placement="frame">As a border</button>
+    <button class="placement-choice" data-placement="both">Both</button>
+  </div>
 
-        let persistentWarpData = null;
-        let landingWarpData = null;
-        let hands = null;
-        let faceMesh = null;
-        let activeHands = [];
-        let activeEyes = [];
-        let isRunning = false;
-        let frameCount = 0;
-        let initialized = false;
-        let isSaving = false;
+  <div class="result-actions">
+    <button class="btn-ghost" id="retakeBtn">Start over</button>
+    <button class="btn-primary" id="downloadBtn">Save postcard</button>
+  </div>
+</div>
 
-        const fairies = [];
-        const stars = [];
+<script>
+/* ============================================================
+   MOTIF LIBRARY
+   Each motif is a literal grid (0/1). This is the fix for
+   "random squares and arrows" — the shapes are never invented
+   by a model at render time. They come from real charted
+   tatreez composition logic: small repeating units (diamonds,
+   hooks, stepped chevrons, eight-point stars) combined with
+   mirror symmetry, the same way physical cross-stitch charts
+   are built.
+   ============================================================ */
 
-        // Exposing error overlay controls globally to bypass context errors
-        window.reportErrorToUI = function(title, details) {
-            document.getElementById('errorTitle').innerText = title;
-            document.getElementById('errorDetails').innerText = details;
-            document.getElementById('errorOverlay').classList.remove('hidden');
-            document.getElementById('errorOverlay').classList.add('flex');
-            isSaving = false;
-            savingLoader.style.display = 'none';
-        };
+function mirrorH(g){ return g.map(r => [...r].reverse()); }
+function mirrorV(g){ return [...g].reverse(); }
+function hconcat(a,b){ return a.map((r,i)=>[...r, ...b[i]]); }
+function vconcat(a,b){ return [...a, ...b]; }
+function padRow(row, l, r){ return [...Array(l).fill(0), ...row, ...Array(r).fill(0)]; }
+function padRows(g,l,r){ return g.map(row => padRow(row,l,r)); }
 
-        window.hideErrorOverlay = function() {
-            const overlay = document.getElementById('errorOverlay');
-            overlay.classList.remove('flex');
-            overlay.classList.add('hidden');
-        };
+const DIAMOND_SMALL = [
+  [0,0,0,1,0,0,0],
+  [0,0,1,1,1,0,0],
+  [0,1,1,1,1,1,0],
+  [1,1,1,1,1,1,1],
+  [0,1,1,1,1,1,0],
+  [0,0,1,1,1,0,0],
+  [0,0,0,1,0,0,0],
+];
 
-        document.getElementById('dismissErrorBtn').addEventListener('click', () => {
-            window.hideErrorOverlay();
-        });
+const HOOK = [
+  [0,0,0,0,1,1,1],
+  [0,0,0,1,1,0,0],
+  [0,0,1,1,0,0,0],
+  [0,1,1,0,0,0,0],
+  [1,1,0,0,0,0,1],
+  [1,1,0,0,0,1,1],
+  [1,1,0,0,1,1,0],
+  [0,1,1,1,1,0,0],
+  [0,0,1,1,0,0,0],
+];
 
-        function initBackground() {
-            const w = bgCanvas.width = Math.max(32, Math.floor(window.innerWidth / 4)); 
-            const h = bgCanvas.height = Math.max(32, Math.floor(window.innerHeight / 4));
-            landingWarpData = new Float32Array(w * h * 2);
-            const centerX = w / 2, centerY = h / 2, radius = w * 0.9;
-            for (let y = 0; y < h; y++) {
-                for (let x = 0; x < w; x++) {
-                    const idx = (y * w + x) * 2;
-                    const dx = x - centerX, dy = y - centerY, d = Math.sqrt(dx*dx + dy*dy);
-                    if (d < radius) {
-                        const amt = Math.pow((radius - d) / radius, 1.4);
-                        const angle = amt * 2.8; 
-                        const c = Math.cos(angle), s = Math.sin(angle);
-                        landingWarpData[idx] = centerX + (dx * c - dy * s);
-                        landingWarpData[idx+1] = centerY + (dx * s + dy * c);
-                    } else {
-                        landingWarpData[idx] = x; landingWarpData[idx+1] = y;
-                    }
-                }
-            }
-            for(let i=0; i<25; i++) fairies.push({x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4, color: Math.random() > 0.5 ? '#ff00ff' : '#00ffff'});
-            for(let i=0; i<150; i++) stars.push({x: Math.random() * w, y: Math.random() * h, alpha: Math.random() * Math.PI, speed: 0.04 + Math.random() * 0.08});
-            drawBackground();
-        }
 
-        function drawBackground() {
-            if(initialized && landingOverlay.style.display === 'none') return;
-            const w = bgCanvas.width, h = bgCanvas.height;
-            if (w <= 0 || h <= 0) {
-                requestAnimationFrame(drawBackground);
-                return;
-            }
-            frameCount++;
-            const off = document.createElement('canvas'); off.width = w; off.height = h;
-            const oCtx = off.getContext('2d');
-            const grad = oCtx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w);
-            grad.addColorStop(0, '#ff00ff'); grad.addColorStop(0.2, '#800080'); grad.addColorStop(0.4, '#3a003a'); grad.addColorStop(1, '#0b010b');
-            oCtx.fillStyle = grad; oCtx.fillRect(0, 0, w, h);
-            stars.forEach(s => { s.alpha += s.speed; const brightness = 150 + Math.sin(s.alpha) * 105; oCtx.fillStyle = `rgb(${brightness}, ${brightness * 0.7}, ${brightness})`; oCtx.fillRect(Math.floor(s.x), Math.floor(s.y), 1, 1); });
-            fairies.forEach(f => { f.x = (f.x + f.vx + w) % w; f.y = (f.y + f.vy + h) % h; const flicker = Math.sin(Date.now() * 0.02) > 0; oCtx.fillStyle = flicker ? '#fff' : f.color; oCtx.fillRect(Math.floor(f.x), Math.floor(f.y), 1, 1); });
-            const srcData = oCtx.getImageData(0, 0, w, h).data;
-            const output = bgCtx.createImageData(w, h), dst = output.data;
-            for (let i = 0; i < w * h; i++) {
-                const x1 = Math.floor(Math.max(0, Math.min(w - 1, landingWarpData[i * 2]))), y1 = Math.floor(Math.max(0, Math.min(h - 1, landingWarpData[i * 2 + 1])));
-                const o = i * 4, p = (y1 * w + x1) * 4;
-                dst[o] = srcData[p]; dst[o+1] = srcData[p+1]; dst[o+2] = srcData[p+2]; dst[o+3] = 255;
-            }
-            bgCtx.putImageData(output, 0, 0);
-            requestAnimationFrame(drawBackground);
-        }
+const BODY_QUAD = [
+  [1,0,0,0,0,0],
+  [0,0,1,0,0,0],
+  [0,1,1,1,0,0],
+  [0,0,1,1,1,0],
+  [0,0,0,1,1,1],
+  [0,0,1,1,1,0],
+];
 
-        async function saveToLibrary() {
-            if (isSaving || !isRunning) return;
-            isSaving = true;
-            
-            const flash = document.getElementById('captureFlash');
-            flash.style.opacity = '1';
-            setTimeout(() => flash.style.opacity = '0', 100);
-            savingLoader.style.display = 'block';
+function buildColumnMotif() {
+  const hookL = HOOK, hookR = mirrorH(HOOK);
+  const topRow = hconcat(hookL, hookR);
+  const width = topRow[0].length;
+  const dpad = Math.floor((width - DIAMOND_SMALL[0].length)/2);
+  const diamondPadded = padRows(DIAMOND_SMALL, dpad, width - DIAMOND_SMALL[0].length - dpad);
+  const top = vconcat(diamondPadded, topRow);
 
-            const snapshot = canvas.toDataURL('image/jpeg', 0.6);
-            
-            try {
-                // Safeguards against reference/initialization crashes
-                if (window.firebaseInitError) {
-                    throw new Error("Init Error: " + window.firebaseInitError);
-                }
-                if (window.firebaseAuthError) {
-                    throw new Error("Auth Error: " + window.firebaseAuthError);
-                }
-                if (!window.fb) {
-                    throw new Error("Database interface failed to load.");
-                }
+  const bodyTop = hconcat(BODY_QUAD, mirrorH(BODY_QUAD));
+  const bodyBottom = hconcat(mirrorV(BODY_QUAD), mirrorV(mirrorH(BODY_QUAD)));
+  const body = vconcat(bodyTop, bodyBottom);
+  const wd = top[0].length - body[0].length;
+  const lpad = Math.floor(wd/2), rpad = wd - lpad;
+  const bodyPadded = padRows(body, lpad, rpad);
 
-                const { db, auth, appId, collection, addDoc } = window.fb;
-                if (!auth.currentUser) throw new Error("Authentication not ready. Please try clicking again.");
-                
-                const savePromise = addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'library'), {
-                    image: snapshot,
-                    timestamp: Date.now(),
-                    userId: auth.currentUser.uid
-                });
+  const bottom = mirrorV(top);
+  return vconcat(vconcat(top, bodyPadded), bottom);
+}
 
-                // Fail fast rather than hanging infinitely
-                const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error("Timeout: Firestore did not respond in 6 seconds.")), 6000)
-                );
+const CYPRESS = [
+  [0,0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,0,0,0,1,1,1,0,0,0,0,0],
+  [0,0,0,0,1,1,1,1,1,0,0,0,0],
+  [0,0,0,1,1,0,1,0,1,1,0,0,0],
+  [0,0,1,1,0,0,1,0,0,1,1,0,0],
+  [0,1,1,0,0,0,1,0,0,0,1,1,0],
+  [1,1,0,0,0,0,1,0,0,0,0,1,1],
+  [0,0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,0,0,0,1,1,1,0,0,0,0,0],
+  [0,0,0,0,1,1,1,1,1,0,0,0,0],
+  [0,0,0,1,1,0,1,0,1,1,0,0,0],
+  [0,0,1,1,0,0,1,0,0,1,1,0,0],
+  [0,1,1,0,0,0,1,0,0,0,1,1,0],
+  [1,1,0,0,0,0,1,0,0,0,0,1,1],
+  [0,0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,1,1,1,1,1,1,1,1,1,0,0],
+];
 
-                await Promise.race([savePromise, timeoutPromise]);
+const STAR = [
+  [0,0,0,0,1,0,0,0,0],
+  [0,1,0,0,1,0,0,1,0],
+  [0,0,1,0,1,0,1,0,0],
+  [0,0,0,1,1,1,0,0,0],
+  [1,1,1,1,1,1,1,1,1],
+  [0,0,0,1,1,1,0,0,0],
+  [0,0,1,0,1,0,1,0,0],
+  [0,1,0,0,1,0,0,1,0],
+  [0,0,0,0,1,0,0,0,0],
+];
 
-                isRunning = false;
-                canvasWrapper.classList.remove('active');
-                libraryOverlay.style.display = 'flex';
-                loadLibrary();
-            } catch (e) {
-                console.error("Save failed:", e);
-                window.reportErrorToUI("Save to Database Failed", e.code ? `${e.message} (Code: ${e.code})` : e.message);
-            }
-        }
+// Road of Stars (Tareeq Al-Nojoum, Jaffa) — a chain of eight-point star
+// bursts connected by a stitched spine, transcribed cell-for-cell from a
+// traditional charted pattern and tiled to repeat down the column.
+const ROAD_UNIT = [
+  [0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0],
+  [0,0,0,0,1,1,0,0,1,0,0,1,1,0,0,0,0],
+  [0,0,0,0,1,1,1,0,1,0,1,1,1,0,0,0,0],
+  [0,1,1,1,0,1,1,0,1,0,1,1,0,1,1,1,0],
+  [0,0,1,1,1,0,1,0,1,0,1,0,1,1,1,0,0],
+  [0,0,0,1,1,1,0,1,0,1,0,1,1,1,0,0,0],
+  [0,0,0,0,0,0,1,0,1,0,1,0,0,0,0,0,0],
+  [0,0,0,1,1,1,0,1,0,1,0,1,1,1,0,0,0],
+  [0,0,1,1,1,0,1,0,1,0,1,0,1,1,1,0,0],
+  [0,1,1,1,0,1,1,0,1,0,1,1,0,1,1,1,0],
+  [0,0,0,0,1,1,1,0,1,0,1,1,1,0,0,0,0],
+  [0,0,0,0,1,1,0,0,1,0,0,1,1,0,0,0,0],
+  [0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0],
+  [0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0],
+];
+const ROAD_OF_STARS = vconcat(ROAD_UNIT, ROAD_UNIT);
 
-        let unsubscribeLibrary = null;
-        function loadLibrary() {
-            try {
-                if (!window.fb) return;
-                const { db, appId, collection, onSnapshot, query, auth } = window.fb;
-                if (!auth.currentUser) return;
+// The Comb (Musht) — parallel teeth and spine, mirrored top/bottom
+const COMB = [
+  [1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,1,0,0,1,0,0,1,0],
+  [1,0,0,1,0,0,1,0,0,1,0],
+  [1,0,0,1,0,0,1,0,0,1,0],
+  [0,0,0,0,0,1,0,0,0,0,0],
+  [0,0,0,0,0,1,0,0,0,0,0],
+  [1,0,0,1,0,0,1,0,0,1,0],
+  [1,0,0,1,0,0,1,0,0,1,0],
+  [1,0,0,1,0,0,1,0,0,1,0],
+  [1,1,1,1,1,1,1,1,1,1,1],
+];
 
-                const q = collection(db, 'artifacts', appId, 'public', 'data', 'library');
-                
-                if (unsubscribeLibrary) unsubscribeLibrary();
-                
-                unsubscribeLibrary = onSnapshot(q, (snapshot) => {
-                    document.getElementById('loadingStatus').style.display = 'none';
-                    galleryGrid.innerHTML = '';
-                    const docs = snapshot.docs.map(d => d.data()).sort((a,b) => b.timestamp - a.timestamp);
-                    docs.forEach(data => {
-                        const div = document.createElement('div');
-                        div.className = 'gallery-item';
-                        const img = document.createElement('img');
-                        img.src = data.image;
-                        div.appendChild(img);
-                        galleryGrid.appendChild(div);
-                    });
-                }, (err) => {
-                    console.error("Library sync error:", err);
-                    document.getElementById('loadingStatus').innerText = "Sync issue. Click TRY AGAIN to reload.";
-                    window.reportErrorToUI("Read Permission Denied", err.message + " (Check Firestore Rules)");
-                });
-            } catch (err) {
-                console.error("Load library failed:", err);
-                window.reportErrorToUI("Initialization Error", err.message);
-            }
-        }
+// Bird (Tayr) — spread wings, body, fanned tail
+const BIRD = [
+  [1,0,0,0,0,0,0,0,0,0,0,1],
+  [0,1,1,0,0,0,0,0,0,1,1,0],
+  [0,0,1,1,0,0,0,0,1,1,0,0],
+  [0,0,0,1,1,0,0,1,1,0,0,0],
+  [0,0,0,0,1,1,1,1,0,0,0,0],
+  [1,0,0,0,0,1,1,0,0,0,0,1],
+  [0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,0,0,1,1,1,0,0,0,0,0],
+  [0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,0,0,1,0,1,0,0,0,0,0],
+  [0,0,0,1,0,1,0,1,0,0,0,0],
+  [0,0,1,0,1,1,1,0,1,0,0,0],
+];
 
-        async function startApp() {
-            // Handle pre-start configuration block errors instantly
-            if (window.firebaseInitError) {
-                window.reportErrorToUI("Firebase Initialization Error", window.firebaseInitError);
-                return;
-            }
-            if (initialized) {
-                if (isRunning) saveToLibrary();
-                return;
-            }
-            initialized = true;
-            uiContainer.classList.add('fade-out');
-            try {
-                await initAI();
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: "user" } });
-                video.srcObject = stream;
-                await video.play();
-                setupCanvasDimensions(video.videoWidth, video.videoHeight);
-                initializeWarpBuffers();
-                landingOverlay.style.opacity = '0';
-                setTimeout(() => { landingOverlay.style.display = 'none'; canvasWrapper.classList.add('active'); }, 1000);
-                isRunning = true;
-                new Camera(video, { onFrame: async () => { if (isRunning) { await hands.send({image: video}); await faceMesh.send({image: video}); processLoop(); } }, width: video.videoWidth, height: video.videoHeight }).start();
-            } catch (err) { console.error(err); initialized = false; uiContainer.classList.remove('fade-out'); }
-        }
+// Pomegranate (Rumman) — crowned fruit with a seeded interior
+const POMEGRANATE = [
+  [0,1,0,1,0,1,0],
+  [0,0,1,0,1,0,0],
+  [0,0,1,1,1,0,0],
+  [0,1,1,1,1,1,0],
+  [1,1,0,1,0,1,1],
+  [1,0,1,1,1,0,1],
+  [1,1,0,1,0,1,1],
+  [0,1,1,1,1,1,0],
+  [0,1,0,1,0,1,0],
+  [0,0,1,1,1,0,0],
+];
 
-        document.body.addEventListener('click', startApp);
+// Olive Branch (Zeitoun) — a central stem with paired leaf clusters
+const OLIVE = [
+  [0,0,0,0,0,1,1,1,0,0,0,0,0],
+  [0,0,0,1,0,0,1,0,0,1,0,0,0],
+  [0,0,1,1,1,0,1,0,1,1,1,0,0],
+  [0,1,1,1,1,1,1,1,1,1,1,1,0],
+  [0,0,1,1,1,0,1,0,1,1,1,0,0],
+  [0,0,0,1,0,0,1,0,0,1,0,0,0],
+  [0,0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,0,1,0,0,1,0,0,1,0,0,0],
+  [0,0,1,1,1,0,1,0,1,1,1,0,0],
+  [0,1,1,1,1,1,1,1,1,1,1,1,0],
+  [0,0,1,1,1,0,1,0,1,1,1,0,0],
+  [0,0,0,1,0,0,1,0,0,1,0,0,0],
+  [0,0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,0,1,0,0,1,0,0,1,0,0,0],
+  [0,0,1,1,1,0,1,0,1,1,1,0,0],
+  [0,1,1,1,1,1,1,1,1,1,1,1,0],
+  [0,0,1,1,1,0,1,0,1,1,1,0,0],
+  [0,0,0,1,0,0,1,0,0,1,0,0,0],
+  [0,0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,0,0,0,0,1,0,0,0,0,0,0],
+];
 
-        async function initAI() {
-            hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-            hands.setOptions({ maxNumHands: 4, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
-            hands.onResults(onHandResults);
-            faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
-            faceMesh.setOptions({ maxNumFaces: 4, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-            faceMesh.onResults(onFaceResults);
-        }
+// Rose / eight-petal flower — dense rounded rosette, called "rose" in Gaza
+const ROSE = [
+  [0,0,0,0,1,1,0,0,0,0],
+  [0,0,1,1,1,1,1,1,0,0],
+  [0,1,1,0,1,1,0,1,1,0],
+  [0,1,0,0,1,1,0,0,1,0],
+  [1,1,1,1,1,1,1,1,1,1],
+  [1,1,1,1,1,1,1,1,1,1],
+  [0,1,0,0,1,1,0,0,1,0],
+  [0,1,1,0,1,1,0,1,1,0],
+  [0,0,1,1,1,1,1,1,0,0],
+  [0,0,0,0,1,1,0,0,0,0],
+];
 
-        function onHandResults(results) {
-            activeHands = (results.multiHandLandmarks || []).map(landmark => ({
-                x: (1 - landmark[8].x) * canvas.width, y: landmark[8].y * canvas.height,
-                mode: results.multiHandLandmarks.length === 2 ? 'pinch' : (countFingers(landmark) === 5 ? 'twirl' : 'none')
-            }));
-        }
+// Grapes (Inab) — vine leaf above a tapering cluster of berries
+const GRAPES = [
+  [0,0,1,0,1,0,0],
+  [0,1,1,1,1,1,0],
+  [0,0,1,1,1,0,0],
+  [0,0,0,1,0,0,0],
+  [0,0,0,1,0,0,0],
+  [0,0,1,0,1,0,0],
+  [0,1,0,1,0,1,0],
+  [1,0,1,0,1,0,1],
+  [0,1,0,1,0,1,0],
+  [1,0,1,0,1,0,1],
+  [0,1,0,1,0,1,0],
+  [0,0,1,0,1,0,0],
+  [0,0,0,1,0,0,0],
+];
 
-        function onFaceResults(results) {
-            activeEyes = [];
-            (results.multiFaceLandmarks || []).forEach(landmarks => {
-                activeEyes.push({ x: (1 - (landmarks[33].x + landmarks[133].x) / 2) * canvas.width, y: (landmarks[159].y + landmarks[145].y) / 2 * canvas.height });
-                activeEyes.push({ x: (1 - (landmarks[362].x + landmarks[263].x) / 2) * canvas.width, y: (landmarks[386].y + landmarks[374].y) / 2 * canvas.height });
-            });
-        }
+// border strip: small repeating zigzag/diamond chain, tiled across full width
+const BORDER_UNIT = [
+  [0,1,0],
+  [1,1,1],
+  [0,1,0],
+];
 
-        function countFingers(landmarks) {
-            let count = 0;
-            [8, 12, 16, 20].forEach(tip => { if (landmarks[tip].y < landmarks[tip-2].y) count++; });
-            if (Math.hypot(landmarks[4].x - landmarks[0].x, landmarks[4].y - landmarks[0].y) > Math.hypot(landmarks[2].x - landmarks[0].x, landmarks[2].y - landmarks[0].y) * 1.2) count++;
-            return count;
-        }
+function buildBorderStrip(targetCols) {
+  let row = BORDER_UNIT;
+  while (row[0].length < targetCols) row = hconcat(row, BORDER_UNIT);
+  // trim to exact width so it never overflows the canvas
+  row = row.map(r => r.slice(0, targetCols));
+  return row;
+}
 
-        function setupCanvasDimensions(w, h) {
-            const vh = window.innerHeight, vw = window.innerWidth, ratio = w / h;
-            canvas.width = (vw/vh > ratio) ? vh * ratio : vw;
-            canvas.height = (vw/vh > ratio) ? vh : vw / ratio;
-        }
+const MOTIFS = {
+  column: {
+    name: "The Watchful Column",
+    desc: "A vertical amulet motif built from mirrored hooks and a stepped diamond chain — traditionally worn over the chest as protection.",
+    grid: buildColumnMotif(),
+  },
+  cypress: {
+    name: "The Cypress",
+    desc: "Sarw, the cypress tree — a motif of steadfastness and rootedness, often stitched in tiers climbing upward.",
+    grid: CYPRESS,
+  },
+  star: {
+    name: "The Eight-Point Star",
+    desc: "A celestial medallion motif, often used as a centerpiece on the chest panel of a thobe.",
+    grid: STAR,
+  },
+  road: {
+    name: "The Road of Stars",
+    desc: "Tareeq Al-Nojoum, a Jaffa pattern — a chain of eight-point stars linked by a single stitched path, walked one star at a time.",
+    grid: ROAD_OF_STARS,
+  },
+  comb: {
+    name: "The Comb",
+    desc: "Musht, the comb — parallel teeth and spine symbolizing order, beauty, and the small rituals of daily life.",
+    grid: COMB,
+  },
+  bird: {
+    name: "The Bird",
+    desc: "Tayr, the bird — wings spread wide, a motif of freedom, hope, and connection to the land.",
+    grid: BIRD,
+  },
+  pomegranate: {
+    name: "The Pomegranate",
+    desc: "Rumman — a crowned fruit stitched full of seeds, symbolizing a fruitful future and the promise of growth.",
+    grid: POMEGRANATE,
+  },
+  olive: {
+    name: "The Olive Branch",
+    desc: "Zeitoun — a stem of paired leaf clusters, rooted in the land and carried as a sign of peace and endurance.",
+    grid: OLIVE,
+  },
+  rose: {
+    name: "The Rose",
+    desc: "An eight-petaled rosette — called a rose in Gaza, a star in Yaffa, and a moon in Ramallah, depending on who is stitching it.",
+    grid: ROSE,
+  },
+  grapes: {
+    name: "The Grape Cluster",
+    desc: "Inab — a vine leaf over a tapering bunch of fruit, a motif of abundance drawn from the orchards of the land.",
+    grid: GRAPES,
+  },
+};
 
-        function initializeWarpBuffers() {
-            const w = canvas.width, h = canvas.height;
-            persistentWarpData = new Float32Array(w * h * 2);
-            for (let i = 0; i < w * h; i++) { persistentWarpData[i * 2] = i % w; persistentWarpData[i * 2 + 1] = Math.floor(i / w); }
-        }
+/* ============================================================
+   LANDING SCREEN — scattered tile field
+   Renders real motif grids as static SVG (same crossed-stitch
+   shape as the canvas renderer, just drawn once rather than
+   animated) and mixes in small photobooth-style placeholder
+   photo tiles, scattered with deliberate randomness across a
+   full-bleed field. Hovering a motif tile freezes its float
+   animation and reveals its name + meaning, the same pairing
+   shown on the actual result screen.
+   ============================================================ */
 
-        function updateWarpMap() {
-            if (!persistentWarpData) return;
-            const w = canvas.width, h = canvas.height;
-            activeHands.forEach(hand => {
-                if (hand.mode === 'none') return;
-                const radius = 130, strength = 0.05, sX = Math.max(0, hand.x - radius), eX = Math.min(w, hand.x + radius), sY = Math.max(0, hand.y - radius), eY = Math.min(h, hand.y + radius);
-                for (let y = sY; y < eY; y++) {
-                    for (let x = sX; x < eX; x++) {
-                        const dx = x - hand.x, dy = y - hand.y, d = Math.sqrt(dx*dx + dy*dy);
-                        if (d < radius) {
-                            const amt = (radius - d) / radius, idx = (Math.floor(y)*w + Math.floor(x))*2;
-                            if (hand.mode === 'pinch') { persistentWarpData[idx] += (persistentWarpData[idx] - hand.x) * amt * strength; persistentWarpData[idx+1] += (persistentWarpData[idx+1] - hand.y) * amt * strength; }
-                            else if (hand.mode === 'twirl') { const a = amt * 0.1, c = Math.cos(a), s = Math.sin(a), du = persistentWarpData[idx] - hand.x, dv = persistentWarpData[idx+1] - hand.y; persistentWarpData[idx] = hand.x + (du * c - dv * s); persistentWarpData[idx+1] = hand.y + (du * s + dv * c); }
-                        }
-                    }
-                }
-            });
-            activeEyes.forEach(eye => {
-                const r = 50, sX = Math.max(0, eye.x - r), eX = Math.min(w, eye.x + r), sY = Math.max(0, eye.y - r), eY = Math.min(h, eye.y + r);
-                for (let y = sY; y < eY; y++) {
-                    for (let x = sX; x < eX; x++) {
-                        const dx = x - eye.x, dy = y - eye.y, d = Math.sqrt(dx*dx + dy*dy);
-                        if (d < r) { const idx = (Math.floor(y)*w + Math.floor(x))*2, ripple = Math.sin(d * 0.2 - frameCount * 0.15) * (r - d) * 0.05; persistentWarpData[idx] += ripple * (dx / d); persistentWarpData[idx+1] += ripple * (dy / d); }
-                    }
-                }
-            });
-        }
+function motifGridToSvg(grid, color) {
+  const rows = grid.length, cols = grid[0].length;
+  const cell = 100 / Math.max(rows, cols);
+  const offsetX = (100 - cols*cell) / 2;
+  const offsetY = (100 - rows*cell) / 2;
+  let paths = '';
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (!grid[r][c]) continue;
+      const x = offsetX + c*cell, y = offsetY + r*cell;
+      const pad = cell * 0.12;
+      paths += `<path d="M${(x+pad).toFixed(2)} ${(y+pad).toFixed(2)} L${(x+cell-pad).toFixed(2)} ${(y+cell-pad).toFixed(2)} M${(x+cell-pad).toFixed(2)} ${(y+pad).toFixed(2)} L${(x+pad).toFixed(2)} ${(y+cell-pad).toFixed(2)}" stroke="${color}" stroke-width="${(cell*0.32).toFixed(2)}" stroke-linecap="round"/>`;
+    }
+  }
+  return `<svg viewBox="0 0 100 100" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" fill="none" xmlns="http://www.w3.org/2000/svg">${paths}</svg>`;
+}
 
-        function processLoop() {
-            const w = canvas.width, h = canvas.height, off = document.createElement('canvas'); off.width = w; off.height = h;
-            const oCtx = off.getContext('2d'); oCtx.translate(w, 0); oCtx.scale(-1, 1); oCtx.drawImage(video, 0, 0, w, h);
-            const src = oCtx.getImageData(0, 0, w, h).data, output = ctx.createImageData(w, h), dst = output.data;
-            updateWarpMap();
-            for (let i = 0; i < w * h; i++) {
-                const u = Math.max(0, Math.min(w - 1, persistentWarpData[i*2])), v = Math.max(0, Math.min(h - 1, persistentWarpData[i*2+1]));
-                const x1 = Math.floor(u), y1 = Math.floor(v), o = i * 4, p = (y1*w+x1)*4;
-                dst[o] = src[p]; dst[o+1] = src[p+1]; dst[o+2] = src[p+2]; dst[o+3] = 255;
-            }
-            ctx.putImageData(output, 0, 0);
-        }
+function initLandingTileField() {
+  const field = document.getElementById('tileField');
+  if (!field) return;
 
-        initBackground();
-        window.onresize = () => { initBackground(); if (isRunning && video.videoWidth) setupCanvasDimensions(video.videoWidth, video.videoHeight); };
-    </script>
+  const motifKeys = Object.keys(MOTIFS);
+  // Show every motif — the field should read as a full gallery of the
+  // real vocabulary, not a sampled preview.
+  const chosenMotifs = [...motifKeys].sort(() => Math.random() - 0.5);
+
+  // Deliberately scattered, non-grid layout: positions as percentages with
+  // enough spread to avoid total overlap, sized and rotated irregularly.
+  // More slots than motifs so the field reads as genuinely full.
+  const layout = [
+    { x: 4,  y: 6,  w: 12, h: 16 },
+    { x: 19, y: 3,  w: 10, h: 13 },
+    { x: 33, y: 10, w: 13, h: 17 },
+    { x: 49, y: 4,  w: 11, h: 14 },
+    { x: 63, y: 9,  w: 13, h: 17 },
+    { x: 80, y: 5,  w: 12, h: 16 },
+    { x: 2,  y: 30, w: 11, h: 14 },
+    { x: 16, y: 36, w: 14, h: 18 },
+    { x: 34, y: 32, w: 12, h: 16 },
+    { x: 50, y: 28, w: 13, h: 17 },
+    { x: 66, y: 34, w: 11, h: 14 },
+    { x: 81, y: 30, w: 13, h: 17 },
+    { x: 8,  y: 56, w: 13, h: 17 },
+    { x: 24, y: 62, w: 11, h: 14 },
+    { x: 40, y: 58, w: 14, h: 18 },
+    { x: 58, y: 60, w: 12, h: 16 },
+    { x: 74, y: 56, w: 13, h: 17 },
+    { x: 88, y: 62, w: 10, h: 13 },
+  ];
+  const shuffledLayout = [...layout].sort(() => Math.random() - 0.5);
+
+  field.innerHTML = '';
+  chosenMotifs.forEach((key, i) => {
+    const slot = shuffledLayout[i % shuffledLayout.length];
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.style.left = slot.x + '%';
+    tile.style.top = slot.y + '%';
+    tile.style.width = slot.w + '%';
+    tile.style.height = slot.h + '%';
+    const rot = (Math.random() * 6 - 3).toFixed(1);
+    tile.style.setProperty('--tile-rot', rot + 'deg');
+    tile.style.animationDelay = (Math.random() * -7).toFixed(2) + 's';
+
+    const motif = MOTIFS[key];
+    tile.classList.add('tile-motif');
+    tile.innerHTML = motifGridToSvg(motif.grid, '#A8222E') +
+      `<div class="tile-reveal">
+         <p class="tile-reveal-eyebrow">Tatreez motif</p>
+         <p class="tile-reveal-name">${motif.name}</p>
+         <p class="tile-reveal-desc">${motif.desc}</p>
+       </div>`;
+    const freeze = () => tile.classList.add('is-frozen');
+    const unfreeze = () => tile.classList.remove('is-frozen');
+    tile.addEventListener('mouseenter', freeze);
+    tile.addEventListener('mouseleave', unfreeze);
+    tile.addEventListener('touchstart', () => {
+      const wasFrozen = tile.classList.contains('is-frozen');
+      document.querySelectorAll('.tile.is-frozen').forEach(unfreeze);
+      if (!wasFrozen) freeze();
+    }, { passive: true });
+
+    field.appendChild(tile);
+  });
+}
+
+function initLogo() {
+  const mount = document.getElementById('logoFlower');
+  if (!mount) return;
+  mount.innerHTML = motifGridToSvg(ROSE, '#A8222E');
+}
+
+initLogo();
+initLandingTileField();
+
+/* ============================================================
+   PERSONALITY QUIZ — maps answers to a motif AND a thread color,
+   as two independent scored dimensions.
+   ============================================================ */
+
+// Thread color palette — meaning drives the mapping, not aesthetics alone.
+const THREAD_COLORS = {
+  black:  { hex: '#2B2A28', name: 'Black',  meaning: 'strength, resilience, dignity' },
+  red:    { hex: '#A8222E', name: 'Red',    meaning: 'courage, passion, love, abundance' },
+  yellow: { hex: '#D9A91A', name: 'Yellow', meaning: 'positivity, joy, optimism' },
+  orange: { hex: '#C9711F', name: 'Orange', meaning: 'warmth, brightness, friendliness' },
+  blue:   { hex: '#2E5C8A', name: 'Blue',   meaning: 'calmness, serenity, hope, peace' },
+  green:  { hex: '#3E7A3E', name: 'Green',  meaning: 'fertility, life' },
+};
+
+const QUIZ = [
+  {
+    q: "When you walk into a room full of strangers, you:",
+    options: [
+      { label: "Find the person standing alone and start a conversation", motif: "star",   color: "orange", weight: 2 },
+      { label: "Hang back and read the room before saying anything",       motif: "column", color: "black",  weight: 2 },
+      { label: "Notice the little things — who looks tired, who needs a chair", motif: "comb", color: "blue", weight: 2 },
+    ],
+  },
+  {
+    q: "A friend is upset. Your first instinct is to:",
+    options: [
+      { label: "Sit with them in it — you don't need to fix anything yet", motif: "olive",   color: "blue",   weight: 2 },
+      { label: "Make them laugh before anything else",                      motif: "bird",    color: "yellow", weight: 2 },
+      { label: "Show up and do something useful — food, a ride, a plan",   motif: "rose", color: "orange", weight: 2 },
+    ],
+  },
+  {
+    q: "Pick the closing line of a story about you:",
+    options: [
+      { label: "...and she was still standing, long after the storm.",       motif: "cypress",     color: "black",  weight: 2 },
+      { label: "...and everyone who knew her felt a little safer.",          motif: "column",      color: "orange", weight: 2 },
+      { label: "...and she'd already started planting something new.",      motif: "pomegranate", color: "green",  weight: 2 },
+    ],
+  },
+  {
+    q: "When something finally goes right after a hard stretch, you feel mostly:",
+    options: [
+      { label: "Steadier — like you're finally back on your path",   motif: "road",    color: "blue",   weight: 2 },
+      { label: "Lit up — you want to celebrate loudly",               motif: "rose",    color: "yellow", weight: 2 },
+      { label: "Fierce gratitude — you fought hard for this",          motif: "cypress", color: "red",    weight: 2 },
+    ],
+  },
+  {
+    q: "The people who know you best would say your love is:",
+    options: [
+      { label: "Intense and all-in, once you're sure",   motif: "grapes", color: "red",    weight: 2 },
+      { label: "Steady — you don't need to prove it loudly", motif: "olive",  color: "black",  weight: 2 },
+      { label: "Generous — your door and your table are always open", motif: "star",   color: "orange", weight: 2 },
+    ],
+  },
+  {
+    q: "On your hardest days, what gets you through is:",
+    options: [
+      { label: "Momentum — one step done, already eyeing the next", motif: "road",    color: "blue",   weight: 1 },
+      { label: "People — calling someone, not being alone",     motif: "grapes",  color: "orange", weight: 1 },
+      { label: "Stubbornness — you simply refuse to fold",       motif: "cypress", color: "black",  weight: 1 },
+    ],
+  },
+  {
+    q: "Which sounds most like a good year for you?",
+    options: [
+      { label: "One where something you planted finally grows", motif: "pomegranate", color: "green",  weight: 2 },
+      { label: "One full of small, beautiful routines kept",      motif: "comb",        color: "yellow", weight: 2 },
+      { label: "One where you finally felt free to move on",       motif: "bird",        color: "blue",   weight: 2 },
+    ],
+  },
+];
+
+let quizState = {
+  step: 0,
+  scores: { column: 0, cypress: 0, star: 0, road: 0, comb: 0, bird: 0, pomegranate: 0, olive: 0, rose: 0, grapes: 0 },
+  colorScores: { black: 0, red: 0, yellow: 0, orange: 0, blue: 0, green: 0 },
+};
+
+/* ============================================================
+   PHOTOBOOTH FILM FILTER
+   Applied only to the captured-photo canvas, never to the stitch
+   canvas, so the thread stays in full color against a grainy
+   black-and-white photo — the classic postcard contrast.
+   ============================================================ */
+
+function applyPhotoboothFilter(ctx, w, h, dpr) {
+  // Work in device pixels since that's what's actually in the buffer.
+  const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+  const imageData = ctx.getImageData(0, 0, pw, ph);
+  const data = imageData.data;
+  const n = data.length / 4;
+
+  // Calibrated against real percentile sampling of a sepia photobooth print:
+  // shadows fall to ~18-24, highlights reach ~200-205 (real contrast range,
+  // not a flat lifted gray), with a warm brown cast (R > G > B).
+  const contrast = 1.05;
+  const floor = 18, ceiling = 205;
+  const grainStrength = 26;
+
+  // First pass: compute luminance for every pixel and track the image's
+  // actual min/max after the contrast push, so the floor/ceiling remap
+  // uses this photo's real range rather than guessing fixed input bounds.
+  const lums = new Float32Array(n);
+  let sum = 0;
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const lum = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+    lums[p] = lum;
+    sum += lum;
+  }
+  const median = sum / n; // close enough to true median for this purpose, cheap
+
+  let lo = Infinity, hi = -Infinity;
+  for (let p = 0; p < n; p++) {
+    const c = (lums[p] - median) * contrast + median;
+    lums[p] = c;
+    if (c < lo) lo = c;
+    if (c > hi) hi = c;
+  }
+  const range = (hi - lo) || 1;
+
+  // Second pass: remap into floor..ceiling, add grain, apply sepia tint.
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    let lum = floor + ((lums[p] - lo) / range) * (ceiling - floor);
+
+    const midtoneWeight = 1 - Math.abs((lum - 128) / 128) * 0.4;
+    const noise = ((Math.random()+Math.random()+Math.random()-1.5) / 1.5) * grainStrength * midtoneWeight;
+    lum = Math.max(0, Math.min(255, lum + noise));
+
+    data[i]   = Math.min(255, lum * 1.00);
+    data[i+1] = Math.min(255, lum * 0.88);
+    data[i+2] = Math.min(255, lum * 0.80);
+    // alpha (data[i+3]) untouched
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
+
+/* ============================================================
+   STITCH RENDERER
+   ============================================================ */
+
+function drawStitch(ctx, x, y, size, color) {
+  const pad = size * 0.12;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = size * 0.34;
+  ctx.beginPath();
+  ctx.moveTo(x+pad, y+pad);
+  ctx.lineTo(x+size-pad, y+size-pad);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x+size-pad, y+pad);
+  ctx.lineTo(x+pad, y+size-pad);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+  ctx.lineWidth = size * 0.08;
+  ctx.beginPath();
+  ctx.moveTo(x+pad+1, y+pad);
+  ctx.lineTo(x+size-pad+1, y+size-pad);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Returns flat list of {x,y,size} cell positions for a grid placed at (originX, originY) with given cell size
+function gridToStitchList(grid, cell, originX, originY) {
+  const list = [];
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[r].length; c++) {
+      if (grid[r][c]) {
+        list.push({ x: originX + c*cell, y: originY + r*cell, size: cell });
+      }
+    }
+  }
+  return list;
+}
+
+function animateStitches(ctx, stitches, color, durationMs, onDone) {
+  const total = stitches.length;
+  if (total === 0) { if (onDone) onDone(); return; }
+  const perStitch = Math.max(2, durationMs / total);
+  let i = 0;
+  function step() {
+    const batch = Math.max(1, Math.floor(total / (durationMs / 16)));
+    for (let k = 0; k < batch && i < total; k++, i++) {
+      const s = stitches[i];
+      drawStitch(ctx, s.x, s.y, s.size, color);
+    }
+    if (i < total) {
+      requestAnimationFrame(step);
+    } else if (onDone) {
+      onDone();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+/* ============================================================
+   APP STATE / FLOW
+   ============================================================ */
+
+const screens = {
+  landing: document.getElementById('screen-landing'),
+  camera: document.getElementById('screen-camera'),
+  quiz: document.getElementById('screen-quiz'),
+  result: document.getElementById('screen-result'),
+};
+
+function showScreen(name) {
+  Object.values(screens).forEach(s => s.classList.remove('active'));
+  screens[name].classList.add('active');
+}
+
+let stream = null;
+const video = document.getElementById('video');
+const captureCanvas = document.getElementById('captureCanvas');
+const cameraCaption = document.getElementById('cameraCaption');
+const cameraHint = document.getElementById('cameraHint');
+
+async function initCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    video.srcObject = stream;
+  } catch (err) {
+    cameraCaption.textContent = "Camera unavailable";
+    cameraHint.textContent = "Allow camera access in your browser settings, then reload. " + (err.message || "");
+  }
+}
+
+let capturedDataUrl = null;
+
+document.getElementById('shutterBtn').addEventListener('click', () => {
+  const w = video.videoWidth, h = video.videoHeight;
+  if (!w || !h) return;
+  captureCanvas.width = w;
+  captureCanvas.height = h;
+  const ctx = captureCanvas.getContext('2d');
+  // mirror to match the preview (front camera is mirrored in the video element via no transform here,
+  // so draw as-is to keep what the user saw)
+  ctx.translate(w, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, w, h);
+  capturedDataUrl = captureCanvas.toDataURL('image/png');
+
+  if (stream) stream.getTracks().forEach(t => t.stop());
+
+  quizState = {
+    step: 0,
+    scores: { column: 0, cypress: 0, star: 0, road: 0, comb: 0, bird: 0, pomegranate: 0, olive: 0, rose: 0, grapes: 0 },
+    colorScores: { black: 0, red: 0, yellow: 0, orange: 0, blue: 0, green: 0 },
+  };
+  renderQuizStep();
+  showScreen('quiz');
+});
+
+document.getElementById('enterPhotoboothBtn').addEventListener('click', () => {
+  showScreen('camera');
+  initCamera();
+});
+
+const aboutOverlay = document.getElementById('aboutOverlay');
+const aboutBtn = document.getElementById('aboutBtn');
+const aboutClose = document.getElementById('aboutClose');
+
+if (aboutBtn && aboutOverlay) {
+  aboutBtn.addEventListener('click', () => aboutOverlay.classList.add('active'));
+  aboutClose.addEventListener('click', () => aboutOverlay.classList.remove('active'));
+  aboutOverlay.addEventListener('click', (e) => {
+    if (e.target === aboutOverlay) aboutOverlay.classList.remove('active');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') aboutOverlay.classList.remove('active');
+  });
+}
+
+/* ---- Quiz rendering ---- */
+
+const quizProgress = document.getElementById('quizProgress');
+const quizQuestion = document.getElementById('quizQuestion');
+const quizOptions = document.getElementById('quizOptions');
+
+function renderQuizStep() {
+  quizProgress.innerHTML = '';
+  QUIZ.forEach((_, i) => {
+    const span = document.createElement('span');
+    if (i < quizState.step) span.classList.add('done');
+    quizProgress.appendChild(span);
+  });
+
+  const q = QUIZ[quizState.step];
+  quizQuestion.textContent = q.q;
+  quizOptions.innerHTML = '';
+  q.options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'quiz-option';
+    btn.textContent = opt.label;
+    btn.addEventListener('click', () => {
+      quizState.scores[opt.motif] += opt.weight;
+      quizState.colorScores[opt.color] += opt.weight;
+      quizState.step++;
+      if (quizState.step < QUIZ.length) {
+        renderQuizStep();
+      } else {
+        finishQuiz();
+      }
+    });
+    quizOptions.appendChild(btn);
+  });
+}
+
+let selectedMotifKey = 'column';
+let selectedColorKey = 'red';
+let currentPlacement = 'overlay';
+
+function pickHighestScore(scores) {
+  let best = null, bestScore = -1;
+  for (const key in scores) {
+    if (scores[key] > bestScore) {
+      bestScore = scores[key];
+      best = key;
+    }
+  }
+  return best;
+}
+
+function finishQuiz() {
+  selectedMotifKey = pickHighestScore(quizState.scores);
+  selectedColorKey = pickHighestScore(quizState.colorScores);
+  showScreen('result');
+  setupResultScreen();
+}
+
+/* ---- Result screen: draw photo + stitched motif ---- */
+
+const resultBaseCanvas = document.getElementById('resultBaseCanvas');
+const resultStitchCanvas = document.getElementById('resultStitchCanvas');
+const colorNameEl = document.getElementById('colorName');
+const colorMeaningEl = document.getElementById('colorMeaning');
+const motifNameEl = document.getElementById('motifName');
+const motifDescEl = document.getElementById('motifDesc');
+const stitchingLabel = document.getElementById('stitchingLabel');
+const placementRow = document.getElementById('placementRow');
+
+function setupResultScreen() {
+  const motif = MOTIFS[selectedMotifKey];
+  const color = THREAD_COLORS[selectedColorKey];
+
+  // Color reading comes first, then the motif reading — the order the
+  // person actually receives their result: what the thread means, then
+  // what shape it was stitched into.
+  colorNameEl.textContent = color.name;
+  colorNameEl.style.color = color.hex;
+  colorMeaningEl.textContent = `A thread of ${color.meaning}.`;
+
+  motifNameEl.textContent = motif.name;
+  motifDescEl.textContent = motif.desc;
+
+  Array.from(placementRow.children).forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.placement === currentPlacement);
+    btn.onclick = () => {
+      currentPlacement = btn.dataset.placement;
+      Array.from(placementRow.children).forEach(b => b.classList.toggle('active', b === btn));
+      drawResult();
+    };
+  });
+
+  // The result screen was just switched from display:none to visible in this
+  // same tick (via showScreen), so the browser may not have computed layout
+  // yet — reading clientWidth/clientHeight right now can return 0, which
+  // silently produces a 0x0 canvas with no visible stitches. Wait two
+  // animation frames (one is sometimes not enough in some browsers) before
+  // measuring and drawing.
+  requestAnimationFrame(() => requestAnimationFrame(() => drawResult()));
+}
+
+function drawResult() {
+  const area = document.getElementById('resultPhotoArea');
+  const w = area.clientWidth, h = area.clientHeight;
+
+  if (!w || !h) {
+    console.warn('Tatreez: result area has zero size, retrying draw shortly.', { w, h });
+    setTimeout(drawResult, 100);
+    return;
+  }
+
+  if (!capturedDataUrl) {
+    console.error('Tatreez: no captured photo available to draw.');
+    stitchingLabel.textContent = 'No photo captured — please retake.';
+    return;
+  }
+
+  const img = new Image();
+  img.onerror = (e) => {
+    console.error('Tatreez: failed to load captured image.', e);
+    stitchingLabel.textContent = 'Could not load photo.';
+  };
+  img.onload = () => {
+    const dpr = window.devicePixelRatio || 1;
+
+    [resultBaseCanvas, resultStitchCanvas].forEach(c => {
+      c.width = w * dpr;
+      c.height = h * dpr;
+      c.style.width = w + 'px';
+      c.style.height = h + 'px';
+    });
+
+    const baseCtx = resultBaseCanvas.getContext('2d');
+    baseCtx.setTransform(1, 0, 0, 1, 0, 0);
+    baseCtx.scale(dpr, dpr);
+    // cover-fit the captured image into the postcard area
+    const ir = img.width / img.height, ar = w / h;
+    let dw, dh, dx, dy;
+    if (ir > ar) { dh = h; dw = h * ir; dx = (w-dw)/2; dy = 0; }
+    else { dw = w; dh = w / ir; dx = 0; dy = (h-dh)/2; }
+    baseCtx.drawImage(img, dx, dy, dw, dh);
+    applyPhotoboothFilter(baseCtx, w, h, dpr);
+
+    const stitchCtx = resultStitchCanvas.getContext('2d');
+    stitchCtx.setTransform(1, 0, 0, 1, 0, 0);
+    stitchCtx.scale(dpr, dpr);
+    stitchCtx.clearRect(0,0,w,h);
+
+    const motif = MOTIFS[selectedMotifKey];
+    let stitches = [];
+
+    if (currentPlacement === 'overlay' || currentPlacement === 'both') {
+      const grid = motif.grid;
+      const cell = Math.min((w * 0.62) / grid[0].length, (h * 0.4) / grid.length);
+      const originX = (w - grid[0].length * cell) / 2;
+      const originY = h * 0.10;
+      stitches = stitches.concat(gridToStitchList(grid, cell, originX, originY));
+    }
+
+    if (currentPlacement === 'frame' || currentPlacement === 'both') {
+      const cols = 22;
+      const cell = w / cols;
+      const strip = buildBorderStrip(cols);
+      // top and bottom border strips
+      stitches = stitches.concat(gridToStitchList(strip, cell, 0, cell*0.5));
+      stitches = stitches.concat(gridToStitchList(strip, cell, 0, h - cell*3.5));
+    }
+
+    console.log('Tatreez: drawing', stitches.length, 'stitches into', w, 'x', h, 'canvas in', selectedColorKey);
+    stitchingLabel.textContent = 'Stitching…';
+    const threadHex = THREAD_COLORS[selectedColorKey].hex;
+    animateStitches(stitchCtx, stitches, threadHex, 1100, () => {
+      stitchingLabel.textContent = `${stitches.length} stitches placed`;
+    });
+  };
+  img.src = capturedDataUrl;
+}
+
+document.getElementById('retakeBtn').addEventListener('click', () => {
+  capturedDataUrl = null;
+  showScreen('camera');
+  initCamera();
+});
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  // composite base + stitch canvases into one PNG for download
+  const w = resultBaseCanvas.width, h = resultBaseCanvas.height;
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(resultBaseCanvas, 0, 0);
+  ctx.drawImage(resultStitchCanvas, 0, 0);
+  const link = document.createElement('a');
+  link.download = 'tatreez-photobooth.png';
+  link.href = out.toDataURL('image/png');
+  link.click();
+});
+
+window.addEventListener('resize', () => {
+  if (screens.result.classList.contains('active')) drawResult();
+});
+</script>
 </body>
 </html>
